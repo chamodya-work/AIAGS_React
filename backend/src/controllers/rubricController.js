@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { query } from '../db.js';
+import fs from 'fs';
+import path from 'path';
 
 const rubricSchema = z.object({
   rubric_name: z.string().min(1),
@@ -85,5 +87,34 @@ export async function uploadRubric(req, res) {
     if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
     console.error(e);
     res.status(500).json({ error: e.message || 'Server error' });
+  }
+}
+
+export async function deleteRubric(req, res) {
+  try {
+    const rubricId = Number(req.params.rubricId);
+    if (!Number.isInteger(rubricId) || rubricId <= 0) {
+      return res.status(400).json({ error: 'Invalid rubric id' });
+    }
+
+    const rows = await query('SELECT * FROM rubrics WHERE rubric_id=?', [rubricId]);
+    const rubric = rows[0];
+    if (!rubric) return res.status(404).json({ error: 'Rubric not found' });
+
+    await query('DELETE FROM rubrics WHERE rubric_id=?', [rubricId]);
+
+    if (rubric.rubric_file_path) {
+      const relativePath = rubric.rubric_file_path.replace(/^\/+/, '').replace(/\//g, path.sep);
+      const absolutePath = path.join(process.cwd(), relativePath);
+
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
   }
 }

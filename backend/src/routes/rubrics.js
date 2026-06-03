@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { getRubricByAssignment, createRubric, uploadRubric } from '../controllers/rubricController.js';
+import { getRubricByAssignment, createRubric, uploadRubric, deleteRubric } from '../controllers/rubricController.js';
 
 const router = Router();
 
@@ -46,6 +46,13 @@ router.post(
     requireRole('admin', 'teacher'),
     upload.single('file'),
     uploadRubric
+);
+
+router.delete(
+    '/:rubricId',
+    requireAuth,
+    requireRole('admin', 'teacher'),
+    deleteRubric
 );
 
 export default router;
