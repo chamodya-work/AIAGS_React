@@ -43,13 +43,17 @@ export async function getMyDashboard(req, res) {
     const assignments = await query(
       `SELECT a.assignment_id, a.assignment_name, a.batch, a.course_name, a.department,
               a.start_date, a.deadline_date, a.remark,
-              p.portfolio_id, p.upload_date
+              p.portfolio_id, p.upload_date, p.portfolio_link
        FROM assignments a
        LEFT JOIN (
-         SELECT assignment_id, MAX(portfolio_id) AS portfolio_id, MAX(upload_date) AS upload_date
-         FROM portfolios
-         WHERE student_no IN (?, ?)
-         GROUP BY assignment_id
+         SELECT p1.assignment_id, p1.portfolio_id, p1.upload_date, p1.portfolio_link
+         FROM portfolios p1
+         JOIN (
+           SELECT assignment_id, MAX(portfolio_id) AS portfolio_id
+           FROM portfolios
+           WHERE student_no IN (?, ?)
+           GROUP BY assignment_id
+         ) latest ON latest.portfolio_id = p1.portfolio_id
        ) p ON p.assignment_id = a.assignment_id
        WHERE (? IS NULL OR ? = '' OR a.batch = ?)
          AND (? IS NULL OR ? = '' OR a.course_name = ?)
@@ -89,6 +93,7 @@ export async function getMyDashboard(req, res) {
         deadline_date: deadline,
         remark: a.remark,
         portfolio_id: a.portfolio_id || null,
+        portfolio_link: a.portfolio_link || null,
         upload_date: uploadDate,
         status,
       };

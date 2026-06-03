@@ -74,12 +74,13 @@ export default function StudentHome() {
                   <th>Batch</th>
                   <th>Due Date</th>
                   <th>Status</th>
+                  <th>Uploaded File</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign:'center', color:'#999', padding:'40px' }}>No assignments found.</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign:'center', color:'#999', padding:'40px' }}>No assignments found.</td></tr>
                 ) : filtered.map(a => (
                   <tr key={a.assignment_id}>
                     <td>{a.assignment_name}</td>
@@ -90,6 +91,15 @@ export default function StudentHome() {
                       <span className={`badge ${STATUS_BADGE[a.status] || 'badge-warning'}`}>
                         {a.status}
                       </span>
+                    </td>
+                    <td>
+                      {a.portfolio_link ? (
+                        <a href={a.portfolio_link} target="_blank" rel="noreferrer">
+                          <button className="btn btn-info btn-sm">View Upload</button>
+                        </a>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td>
                       {a.status !== 'SUBMITTED' && (
