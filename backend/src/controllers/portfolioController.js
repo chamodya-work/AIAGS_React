@@ -8,23 +8,37 @@ const createPortfolioSchema = z.object({
   assignment_id: z.coerce.number().int()
 });
 
+async function resolveUploadStudentNo(req, submittedStudentNo) {
+  if (req.user?.role !== 'student') return submittedStudentNo;
+
+  const student = (
+    await query(
+      'SELECT student_no FROM students WHERE user_id=? LIMIT 1',
+      [req.user.user_id]
+    )
+  )[0];
+
+  return student?.student_no || submittedStudentNo;
+}
+
 export async function uploadPortfolio(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const meta = createPortfolioSchema.parse(req.body);
+    const studentNo = await resolveUploadStudentNo(req, meta.student_no);
 
     // ensure student exists (create on the fly if not present)
-    const student = (await query('SELECT student_no FROM students WHERE student_no=?', [meta.student_no]))[0];
+    const student = (await query('SELECT student_no FROM students WHERE student_no=?', [studentNo]))[0];
     if (!student) {
-      await query('INSERT INTO students (student_no) VALUES (?)', [meta.student_no]);
+      await query('INSERT INTO students (student_no) VALUES (?)', [studentNo]);
     }
 
     const relativePath = path.posix.join('uploads', req.file.filename);
 
     const result = await query(
       'INSERT INTO portfolios (student_no, assignment_id, portfolio_link) VALUES (?,?,?)',
-      [meta.student_no, meta.assignment_id, `/${relativePath}`]
+      [studentNo, meta.assignment_id, `/${relativePath}`]
     );
 
     const rows = await query('SELECT * FROM portfolios WHERE portfolio_id=?', [result.insertId]);

@@ -332,6 +332,9 @@ export async function login(req, res) {
     if (!ok) return res.status(401).json({ error: "Invalid email or password" });
 
     const token = signToken(user);
+    const localStudent = user.role === "student"
+      ? (await query("SELECT student_no FROM students WHERE user_id=? LIMIT 1", [user.user_id]))[0]
+      : null;
 
     return res.json({
       token,
@@ -340,6 +343,7 @@ export async function login(req, res) {
         role: user.role,
         email: user.email,
         display_name: user.display_name,
+        student_no: localStudent?.student_no || null,
       },
       homeRoute: getHomeRoute(user.role),
     });

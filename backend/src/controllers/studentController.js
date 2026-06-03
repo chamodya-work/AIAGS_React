@@ -45,15 +45,19 @@ export async function getMyDashboard(req, res) {
               a.start_date, a.deadline_date, a.remark,
               p.portfolio_id, p.upload_date
        FROM assignments a
-       LEFT JOIN portfolios p
-         ON p.assignment_id = a.assignment_id
-        AND p.student_no = ?
+       LEFT JOIN (
+         SELECT assignment_id, MAX(portfolio_id) AS portfolio_id, MAX(upload_date) AS upload_date
+         FROM portfolios
+         WHERE student_no IN (?, ?)
+         GROUP BY assignment_id
+       ) p ON p.assignment_id = a.assignment_id
        WHERE (? IS NULL OR ? = '' OR a.batch = ?)
          AND (? IS NULL OR ? = '' OR a.course_name = ?)
          AND (? IS NULL OR ? = '' OR a.department IS NULL OR LOWER(a.department) = LOWER(?))
        ORDER BY a.deadline_date ASC, a.assignment_id DESC`,
       [
         student.student_no,
+        student.email,
         student.batch,
         student.batch,
         student.batch,
