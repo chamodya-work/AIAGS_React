@@ -18,7 +18,7 @@ export async function listAssignments(req, res) {
     const { course_name, batch } = req.query;
 
     let sql = `
-      SELECT assignment_id, assignment_name, batch, course_name
+      SELECT assignment_id, assignment_name, batch, course_name, deadline_date
       FROM assignments
       WHERE 1=1
     `;

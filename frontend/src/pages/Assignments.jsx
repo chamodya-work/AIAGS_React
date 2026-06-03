@@ -5,6 +5,15 @@ import { api } from '../api/api';
 const DEPTS  = ['Medicine', 'Surgery', 'Pediatrics', 'Obstetrics', 'Community Medicine'];
 const ATTACH = ['Attendance', 'Professionalism Index', 'Photos'];
 
+function formatDate(value) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return date.toLocaleDateString();
+}
+
 export default function AssignmentsPage() {
   const navigate = useNavigate();
   const [courses, setCourses]  = useState([]);
@@ -141,7 +150,7 @@ export default function AssignmentsPage() {
                     <td>{a.batch}</td>
                     <td>{a.course_name}</td>
                     <td>{a.assignment_name}</td>
-                    <td>{a.deadline_date ? new Date(a.deadline_date).toLocaleDateString() : '—'}</td>
+                    <td>{formatDate(a.deadline_date)}</td>
                     <td>
                       <button className="icon-btn" title="Edit" onClick={() => navigate(`/assignments/edit/${a.assignment_id}`)}>📝</button>
                     </td>
