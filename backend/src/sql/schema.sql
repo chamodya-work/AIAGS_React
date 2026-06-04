@@ -53,7 +53,13 @@ CREATE TABLE IF NOT EXISTS assignments (
   course_name VARCHAR(100) NOT NULL,
   department VARCHAR(100) NULL,
   start_date DATE NULL,
+  start_time TIME NULL DEFAULT NULL,
   deadline_date DATE NULL,
+  deadline_time TIME NULL DEFAULT NULL,
+  guideline_file_path VARCHAR(1000) NULL,
+  guideline_file_original_name VARCHAR(255) NULL,
+  guideline_file_mime VARCHAR(255) NULL,
+  guideline_file_size BIGINT NULL,
   remark TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -137,6 +143,19 @@ CREATE TABLE IF NOT EXISTS student_feedback (
   CONSTRAINT fk_feedback_student FOREIGN KEY (student_no) REFERENCES students(student_no) ON DELETE CASCADE,
   CONSTRAINT fk_feedback_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
   CONSTRAINT fk_feedback_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE SET NULL
+);
+
+-- Required submission documents per assignment
+CREATE TABLE IF NOT EXISTS assignment_required_documents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  assignment_id INT NOT NULL,
+  document_name VARCHAR(255) NOT NULL,
+  allowed_file_type VARCHAR(50) NOT NULL,
+  is_mandatory TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_required_docs_assignment (assignment_id),
+  CONSTRAINT fk_required_docs_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE
 );
 
 -- Assign_Teachers

@@ -38,6 +38,11 @@ app.use('/uploads/reports', (req, res) => {
   res.status(403).json({ error: 'Access denied' });
 });
 
+// Assignment guideline files must stay behind protected assignment API routes.
+app.use('/uploads/guidelines', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
 // Uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

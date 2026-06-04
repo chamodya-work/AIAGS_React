@@ -7,16 +7,21 @@ function toDateOnly(value) {
   return d.toISOString().slice(0, 10);
 }
 
-function computeStatus(deadlineDate, uploadedAt) {
+function computeStatus(deadlineDate, deadlineTime, uploadedAt) {
   if (uploadedAt) return "SUBMITTED";
   if (!deadlineDate) return "PENDING";
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(deadlineDate);
-  due.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const due = deadlineTime
+    ? new Date(`${deadlineDate}T${String(deadlineTime).slice(0, 8)}`)
+    : new Date(deadlineDate);
 
-  return due < today ? "OVERDUE" : "PENDING";
+  if (!deadlineTime) {
+    now.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+  }
+
+  return due < now ? "OVERDUE" : "PENDING";
 }
 
 export async function getMyDashboard(req, res) {
@@ -42,7 +47,7 @@ export async function getMyDashboard(req, res) {
 
     const assignments = await query(
       `SELECT a.assignment_id, a.assignment_name, a.batch, a.course_name, a.department,
-              a.start_date, a.deadline_date, a.remark,
+              a.start_date, a.start_time, a.deadline_date, a.deadline_time, a.remark,
               p.portfolio_id, p.upload_date, p.portfolio_link
        FROM assignments a
        LEFT JOIN (
@@ -82,7 +87,7 @@ export async function getMyDashboard(req, res) {
     const normalized = assignments.map((a) => {
       const deadline = toDateOnly(a.deadline_date);
       const uploadDate = a.upload_date ? new Date(a.upload_date).toISOString() : null;
-      const status = computeStatus(deadline, uploadDate);
+      const status = computeStatus(deadline, a.deadline_time, uploadDate);
       return {
         assignment_id: a.assignment_id,
         assignment_name: a.assignment_name,
@@ -90,7 +95,9 @@ export async function getMyDashboard(req, res) {
         course_name: a.course_name,
         department: a.department,
         start_date: toDateOnly(a.start_date),
+        start_time: a.start_time || null,
         deadline_date: deadline,
+        deadline_time: a.deadline_time || null,
         remark: a.remark,
         portfolio_id: a.portfolio_id || null,
         portfolio_link: a.portfolio_link || null,

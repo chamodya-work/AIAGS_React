@@ -195,6 +195,12 @@ html, body, #root {
 }
 .form-input:focus,
 .form-select:focus { border-color: var(--secondary-color); }
+.form-input:disabled,
+.form-select:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
 
 /* ── Buttons ─────────────────────────────────────────────── */
 .btn {
@@ -262,6 +268,34 @@ html, body, #root {
 }
 .data-table tbody tr:hover { background-color: #f8f9fa; }
 .data-table tbody tr:last-child td { border-bottom: none; }
+.assignments-table {
+  min-width: 900px;
+}
+.assignment-required-docs {
+  margin-top: 8px;
+}
+.required-docs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.required-docs-header h2 {
+  font-size: 16px;
+  color: var(--text-dark);
+}
+.compact-table-container {
+  margin-top: 0;
+}
+.required-docs-table {
+  min-width: 780px;
+}
+.required-docs-table .form-input,
+.required-docs-table .form-select {
+  width: 100%;
+  min-width: 150px;
+}
 .icon-btn {
   background: none;
   border: none;

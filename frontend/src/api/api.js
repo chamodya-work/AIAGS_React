@@ -103,10 +103,14 @@ export const api = {
       return request(`/api/assignments${q ? `?${q}` : ''}`);
     },
     get: (id) => request(`/api/assignments/${id}`),
-    // Backend schema: { assignment_name, batch, course_name, department?, start_date?, deadline_date?, remark? }
-    create: (payload) => request('/api/assignments', { method: 'POST', body: JSON.stringify(payload) }),
+    create: (payload) =>
+      request('/api/assignments', {
+        method: 'POST',
+        body: payload instanceof FormData ? payload : JSON.stringify(payload),
+      }),
     update: (id, payload) => request(`/api/assignments/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     remove: (id) => request(`/api/assignments/${id}`, { method: 'DELETE' }),
+    openGuideline: (id) => openAuthorizedFile(`/api/assignments/${id}/guideline`),
   },
 
   // /api/rubrics

@@ -8,6 +8,14 @@ const STATUS_BADGE = {
   OVERDUE:   'badge-danger',
 };
 
+function formatDateTime(dateValue, timeValue) {
+  if (!dateValue) return '—';
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '—';
+  const dateText = date.toLocaleDateString();
+  return timeValue ? `${dateText} ${String(timeValue).slice(0, 5)}` : dateText;
+}
+
 export default function StudentHome() {
   const navigate = useNavigate();
   const [data, setData]       = useState(null);
@@ -72,7 +80,7 @@ export default function StudentHome() {
                   <th>Assignment</th>
                   <th>Course</th>
                   <th>Batch</th>
-                  <th>Due Date</th>
+                  <th>Due Date/Time</th>
                   <th>Status</th>
                   <th>Uploaded File</th>
                   <th>Action</th>
@@ -86,7 +94,7 @@ export default function StudentHome() {
                     <td>{a.assignment_name}</td>
                     <td>{a.course_name}</td>
                     <td>{a.batch}</td>
-                    <td>{a.deadline_date ? new Date(a.deadline_date).toLocaleDateString() : '—'}</td>
+                    <td>{formatDateTime(a.deadline_date, a.deadline_time)}</td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[a.status] || 'badge-warning'}`}>
                         {a.status}

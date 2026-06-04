@@ -14,6 +14,7 @@ const migrationPaths = [
   path.join(__dirname, 'step2_dynamic_ai_grading_migration.sql'),
   path.join(__dirname, 'step2_fix_ai_grading_timestamps.sql'),
   path.join(__dirname, 'step3_student_feedback_migration.sql'),
+  path.join(__dirname, 'step4_assignment_upgrade_migration.sql'),
 ];
 
 const schemaSql = await fs.readFile(schemaPath, 'utf8');
