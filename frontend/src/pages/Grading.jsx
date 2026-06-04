@@ -25,6 +25,7 @@ export default function GradingPage() {
   const [finalScores, setFinalScores] = useState({});
   const [report, setReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(null);
 
   useEffect(() => {
     api.courses.list()
@@ -107,6 +108,18 @@ export default function GradingPage() {
       setError(err.message);
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const handleDownloadReportPdf = async (portfolioId) => {
+    setPdfDownloading(portfolioId);
+    setError('');
+    try {
+      await api.grading.downloadReportPdf(portfolioId);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPdfDownloading(null);
     }
   };
 
@@ -222,9 +235,18 @@ export default function GradingPage() {
                       <td style={{ fontWeight:700, color:'#2196F3' }}>{r.ai_grade ?? '-'}</td>
                       <td>
                         {aiStatus === 'graded' ? (
-                          <button className="btn btn-info btn-sm" onClick={() => handleViewReport(r.portfolio_id)} disabled={reportLoading}>
-                            View Report
-                          </button>
+                          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                            <button className="btn btn-info btn-sm" onClick={() => handleViewReport(r.portfolio_id)} disabled={reportLoading}>
+                              View Report
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleDownloadReportPdf(r.portfolio_id)}
+                              disabled={pdfDownloading === r.portfolio_id}
+                            >
+                              {pdfDownloading === r.portfolio_id ? 'Downloading...' : 'Download PDF'}
+                            </button>
+                          </div>
                         ) : '-'}
                       </td>
                       <td style={{ maxWidth:220, fontSize:12, color:'#b00020' }}>

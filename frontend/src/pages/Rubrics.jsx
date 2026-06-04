@@ -112,7 +112,7 @@ export default function RubricsPage() {
 
         <div className="form-row" style={{ alignItems:'center', flexWrap:'wrap', gap:12 }}>
           <label className="form-label">Upload Rubric:</label>
-          <input type="file" ref={fileRef} accept=".pdf,.doc,.docx,.txt" style={{ flex:1, minWidth:180 }} />
+          <input type="file" ref={fileRef} accept=".xlsx,.xls,.csv,.pdf,.docx" style={{ flex:1, minWidth:180 }} />
           <button className="btn btn-primary" onClick={handleUpload} disabled={saving}>
             {saving ? 'Uploading…' : 'UPLOAD RUBRIC'}
           </button>

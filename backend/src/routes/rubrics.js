@@ -24,16 +24,25 @@ const upload = multer({
     storage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     fileFilter: (req, file, cb) => {
-        const ok = [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'text/plain',
-        ].includes(file.mimetype);
-        if (!ok) return cb(new Error('Only PDF/DOC/DOCX/TXT allowed'));
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        if (ext === '.doc') {
+            return cb(new Error('DOC files are not supported. Please convert the document to DOCX or PDF and upload again.'));
+        }
+
+        const ok = ['.xlsx', '.xls', '.csv', '.pdf', '.docx'].includes(ext);
+        if (!ok) {
+            return cb(new Error('Unsupported file type. Please upload rubric as Excel/PDF/DOCX and assignment submission as PDF or DOCX.'));
+        }
         cb(null, true);
     },
 });
+
+function handleRubricUpload(req, res, next) {
+    upload.single('file')(req, res, (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+    });
+}
 
 // ===== Existing =====
 router.get('/assignment/:assignmentId', requireAuth, requireRole('admin', 'teacher'), getRubricByAssignment);
@@ -45,7 +54,7 @@ router.post(
     '/upload',
     requireAuth,
     requireRole('admin', 'teacher'),
-    upload.single('file'),
+    handleRubricUpload,
     uploadRubric
 );
 

@@ -46,6 +46,36 @@ async function openAuthorizedFile(path) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+async function downloadAuthorizedFile(path, fallbackFilename) {
+  const token = localStorage.getItem('aigs_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(BASE + path, { headers });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      const data = await res.json();
+      message = data?.error || data?.message || message;
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || fallbackFilename || 'download.pdf';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export const api = {
   auth: {
     // POST /api/auth/login
@@ -124,6 +154,11 @@ export const api = {
     resultsByAssignment: (assignmentId) =>
       request(`/api/grading/assignment/${assignmentId}/results`),
     report: (portfolioId) => request(`/api/grading/portfolio/${portfolioId}/report`),
+    downloadReportPdf: (portfolioId) =>
+      downloadAuthorizedFile(
+        `/api/grading/portfolio/${portfolioId}/report/pdf`,
+        `ai-assignment-evaluation-report-${portfolioId}.pdf`
+      ),
     // Backend expects: { final_grade: number, status?: 'DRAFT'|'PUBLISHED' }
     setFinal: (portfolioId, payload) =>
       request(`/api/grading/portfolio/${portfolioId}/final`, {

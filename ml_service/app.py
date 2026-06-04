@@ -1,8 +1,9 @@
 import json
 import os
 import re
+import csv
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -15,6 +16,17 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", os.getenv("AIAGS_OLLAMA_MODEL", "llama3.1:8b"))
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 MAX_EXTRACTED_CHARS = int(os.getenv("MAX_EXTRACTED_CHARS", "30000"))
+
+RUBRIC_EXTENSIONS = {".xlsx", ".xls", ".csv", ".pdf", ".docx"}
+SUBMISSION_EXTENSIONS = {".pdf", ".docx"}
+UNSUPPORTED_FILE_MESSAGE = (
+    "Unsupported file type. Please upload rubric as Excel/PDF/DOCX and assignment submission as PDF or DOCX."
+)
+DOC_UNSUPPORTED_MESSAGE = "DOC files are not supported. Please convert the document to DOCX or PDF and upload again."
+PDF_TEXT_UNREADABLE_MESSAGE = (
+    "PDF text could not be extracted. The file may be scanned or image-based. "
+    "Please upload a text-based PDF or DOCX."
+)
 
 
 class AssignmentInfo(BaseModel):
@@ -82,83 +94,178 @@ def _truncate(text: str) -> str:
     return text[:MAX_EXTRACTED_CHARS] + "\n\n[Content truncated for AI processing.]"
 
 
-def extract_text(file_path: Optional[str], label: str) -> str:
+def _format_table(title: str, rows: List[List[Any]]) -> str:
+    cleaned_rows: List[List[str]] = []
+    for row in rows:
+        cleaned = [str(cell).strip() if cell is not None else "" for cell in row]
+        if any(cleaned):
+            cleaned_rows.append(cleaned)
+
+    if not cleaned_rows:
+        return ""
+
+    max_cols = max(len(row) for row in cleaned_rows)
+    lines = [title]
+    for idx, row in enumerate(cleaned_rows, start=1):
+        normalized = row + [""] * (max_cols - len(row))
+        lines.append(f"Row {idx}: " + " | ".join(normalized))
+    return "\n".join(lines)
+
+
+def _extract_pdf_text(file_path: str) -> str:
+    text_parts: List[str] = []
+    try:
+        import pdfplumber
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    text_parts.append(page_text.strip())
+    except Exception:
+        text_parts = []
+
+    if not text_parts:
+        try:
+            import fitz
+            doc = fitz.open(file_path)
+            for page in doc:
+                page_text = page.get_text("text") or ""
+                if page_text.strip():
+                    text_parts.append(page_text.strip())
+        except Exception:
+            text_parts = []
+
+    text = "\n".join(text_parts).strip()
+    if not text:
+        raise ValueError(PDF_TEXT_UNREADABLE_MESSAGE)
+    return _truncate(text)
+
+
+def _extract_docx_text(file_path: str) -> str:
+    try:
+        from docx import Document
+        doc = Document(file_path)
+        text_parts = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+        for table_index, table in enumerate(doc.tables, start=1):
+            rows = []
+            for row in table.rows:
+                rows.append([cell.text.replace("\n", " ").strip() for cell in row.cells])
+            table_text = _format_table(f"TABLE {table_index}:", rows)
+            if table_text:
+                text_parts.append(table_text)
+        text = "\n".join(text_parts).strip()
+    except Exception as exc:
+        raise ValueError("Could not read DOCX content.") from exc
+
+    if not text:
+        raise ValueError("No readable text found in DOCX file.")
+    return _truncate(text)
+
+
+def _extract_xlsx_text(file_path: str) -> str:
+    try:
+        from openpyxl import load_workbook
+        workbook = load_workbook(file_path, read_only=True, data_only=True)
+        parts = []
+        for sheet in workbook.worksheets:
+            rows = [[cell for cell in row] for row in sheet.iter_rows(values_only=True)]
+            table_text = _format_table(f"SHEET: {sheet.title}", rows)
+            if table_text:
+                parts.append(table_text)
+        workbook.close()
+    except Exception as exc:
+        raise ValueError("Could not read Excel rubric content.") from exc
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        raise ValueError("No readable text found in Excel rubric.")
+    return _truncate(text)
+
+
+def _extract_xls_text(file_path: str) -> str:
+    try:
+        import pandas as pd
+        sheets = pd.read_excel(file_path, sheet_name=None, header=None, dtype=str, engine="xlrd")
+        parts = []
+        for sheet_name, frame in sheets.items():
+            frame = frame.dropna(how="all").dropna(axis=1, how="all")
+            rows = frame.where(pd.notna(frame), None).values.tolist()
+            table_text = _format_table(f"SHEET: {sheet_name}", rows)
+            if table_text:
+                parts.append(table_text)
+    except Exception as exc:
+        raise ValueError("Could not read Excel rubric content.") from exc
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        raise ValueError("No readable text found in Excel rubric.")
+    return _truncate(text)
+
+
+def _extract_csv_text(file_path: str) -> str:
+    last_error: Optional[Exception] = None
+    for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            with open(file_path, newline="", encoding=encoding) as f:
+                rows = list(csv.reader(f))
+            text = _format_table("CSV RUBRIC:", rows).strip()
+            if not text:
+                raise ValueError("No readable text found in CSV rubric.")
+            return _truncate(text)
+        except Exception as exc:
+            last_error = exc
+    raise ValueError("Could not read CSV rubric content.") from last_error
+
+
+def extract_text(file_path: Optional[str], label: str, allowed_extensions: Set[str]) -> str:
     if not file_path:
         raise ValueError(f"{label} file path is missing.")
     if not os.path.exists(file_path):
         raise ValueError(f"{label} file was not found.")
 
     ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".doc":
+        raise ValueError(DOC_UNSUPPORTED_MESSAGE)
+
+    if ext not in allowed_extensions:
+        raise ValueError(UNSUPPORTED_FILE_MESSAGE)
 
     if ext == ".pdf":
-        text_parts: List[str] = []
-        try:
-            import pdfplumber
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text() or ""
-                    if page_text.strip():
-                        text_parts.append(page_text.strip())
-        except Exception:
-            text_parts = []
-
-        if not text_parts:
-            try:
-                import fitz
-                doc = fitz.open(file_path)
-                for page in doc:
-                    page_text = page.get_text("text") or ""
-                    if page_text.strip():
-                        text_parts.append(page_text.strip())
-            except Exception as exc:
-                raise ValueError(f"Could not read {label} PDF content.") from exc
-
-        text = "\n".join(text_parts).strip()
-        if not text:
-            raise ValueError(f"No readable text found in {label} PDF.")
-        return _truncate(text)
+        return _extract_pdf_text(file_path)
 
     if ext == ".docx":
-        try:
-            from docx import Document
-            doc = Document(file_path)
-            text_parts = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        if cell.text and cell.text.strip():
-                            text_parts.append(cell.text.strip())
-            text = "\n".join(text_parts).strip()
-        except Exception as exc:
-            raise ValueError(f"Could not read {label} DOCX content.") from exc
+        return _extract_docx_text(file_path)
 
-        if not text:
-            raise ValueError(f"No readable text found in {label} DOCX.")
-        return _truncate(text)
+    if ext == ".xlsx":
+        return _extract_xlsx_text(file_path)
 
-    if ext == ".txt":
-        try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                text = f.read().strip()
-        except Exception as exc:
-            raise ValueError(f"Could not read {label} TXT content.") from exc
+    if ext == ".xls":
+        return _extract_xls_text(file_path)
 
-        if not text:
-            raise ValueError(f"No readable text found in {label} TXT.")
-        return _truncate(text)
+    if ext == ".csv":
+        return _extract_csv_text(file_path)
 
-    if ext == ".doc":
-        raise ValueError(f"{label} DOC files are not supported. Please upload DOCX, PDF, or TXT.")
+    raise ValueError(UNSUPPORTED_FILE_MESSAGE)
 
-    raise ValueError(f"{label} file type '{ext or 'unknown'}' is not supported.")
+
+def extract_rubric_file_text(file_path: str) -> str:
+    filename = os.path.basename(file_path)
+    content = extract_text(file_path, "rubric", RUBRIC_EXTENSIONS)
+    return f"RUBRIC FILE: {filename}\n{content}"
+
+
+def extract_submission_file_text(file_path: str, index: int = 1) -> str:
+    filename = os.path.basename(file_path)
+    content = extract_text(file_path, "student submission", SUBMISSION_EXTENSIONS)
+    return f"FILE {index}: {filename}\n{content}"
 
 
 def rubric_content(req: GradeRequest) -> str:
     parts = []
     if req.rubric.rubric_text and req.rubric.rubric_text.strip():
-      parts.append(req.rubric.rubric_text.strip())
+        parts.append(req.rubric.rubric_text.strip())
     if req.rubric.file_path:
-      parts.append(extract_text(req.rubric.file_path, "rubric"))
+        parts.append(extract_rubric_file_text(req.rubric.file_path))
 
     text = "\n\n".join(parts).strip()
     if not text:
@@ -351,7 +458,7 @@ def health():
 def grade(req: GradeRequest):
     try:
         rubric_text = rubric_content(req)
-        submission_text = extract_text(req.submission.file_path, "student submission")
+        submission_text = extract_submission_file_text(req.submission.file_path)
 
         first_error = None
         structured = None

@@ -3,6 +3,11 @@ import fs from 'fs';
 import { z } from 'zod';
 import { query } from '../db.js';
 import { gradePortfolio } from '../services/mlClient.js';
+import {
+  generateAiReportPdf,
+  makeReportFilename,
+  resolveReportPdfPath,
+} from '../services/reportPdfService.js';
 
 const finalSchema = z.object({
   final_grade: z.coerce.number().min(0).max(100),
@@ -55,15 +60,30 @@ function looksLikeRawJson(value) {
   return /^[\s\r\n]*[\[{]/.test(String(value || ''));
 }
 
+function formatReportDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 16).replace('T', ' ');
+  return date.toISOString().slice(0, 16).replace('T', ' ');
+}
+
+function sendReportPdf(res, filePath, portfolioId) {
+  return res.download(filePath, makeReportFilename(portfolioId), (err) => {
+    if (err && !res.headersSent) {
+      res.status(500).json({ error: 'Could not download AI report PDF' });
+    }
+  });
+}
+
 async function markProcessing(portfolioId, rubricId) {
   await query(
     `INSERT INTO ai_grading
       (portfolio_id, rubric_id, ai_status, ai_grade, ai_review_report, ai_report_text,
-       ai_grading_error, ai_grading_technical_error, grading_started_at, graded_at)
-     VALUES (?, ?, 'processing', NULL, NULL, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL)
+       ai_report_pdf_path, ai_grading_error, ai_grading_technical_error, grading_started_at, graded_at)
+     VALUES (?, ?, 'processing', NULL, NULL, NULL, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL)
      ON DUPLICATE KEY UPDATE
        rubric_id=VALUES(rubric_id),
        ai_status='processing',
+       ai_report_pdf_path=NULL,
        ai_grading_error=NULL,
        ai_grading_technical_error=NULL,
        grading_started_at=CURRENT_TIMESTAMP`,
@@ -93,14 +113,15 @@ async function markGraded(portfolioId, rubricId, result) {
   await query(
     `INSERT INTO ai_grading
       (portfolio_id, rubric_id, ai_grade, ai_review_report, ai_status, ai_report_text,
-       ai_grading_error, ai_grading_technical_error, ai_model, graded_at)
-     VALUES (?, ?, ?, ?, 'graded', ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+       ai_report_pdf_path, ai_grading_error, ai_grading_technical_error, ai_model, graded_at)
+     VALUES (?, ?, ?, ?, 'graded', ?, NULL, NULL, NULL, ?, CURRENT_TIMESTAMP)
      ON DUPLICATE KEY UPDATE
        rubric_id=VALUES(rubric_id),
        ai_grade=VALUES(ai_grade),
        ai_review_report=VALUES(ai_review_report),
        ai_status='graded',
        ai_report_text=VALUES(ai_report_text),
+       ai_report_pdf_path=NULL,
        ai_grading_error=NULL,
        ai_grading_technical_error=NULL,
        ai_model=VALUES(ai_model),
@@ -339,6 +360,62 @@ export async function getAiReport(req, res) {
       ai_report_text: reportText,
     },
   });
+}
+
+export async function getAiReportPdf(req, res) {
+  const portfolioId = Number(req.params.id);
+  const row = (
+    await query(
+      `SELECT ag.portfolio_id, ag.ai_status, ag.ai_grade, ag.ai_report_text, ag.ai_review_report,
+              ag.ai_report_pdf_path, ag.ai_grading_error, ag.ai_model, ag.graded_at,
+              p.student_no, a.assignment_name, a.course_name
+       FROM ai_grading ag
+       JOIN portfolios p ON p.portfolio_id = ag.portfolio_id
+       JOIN assignments a ON a.assignment_id = p.assignment_id
+       WHERE ag.portfolio_id=?`,
+      [portfolioId]
+    )
+  )[0];
+
+  if (!row) return res.status(404).json({ error: 'AI report not found' });
+  if (row.ai_status !== 'graded') {
+    return res.status(409).json({ error: row.ai_grading_error || 'AI grading is not complete', ai_status: row.ai_status });
+  }
+
+  const reportText = row.ai_report_text || row.ai_review_report;
+  if (!reportText) return res.status(404).json({ error: 'AI report text is not available' });
+  if (looksLikeRawJson(reportText)) {
+    return res.status(409).json({
+      error: 'This is a legacy AI report format. Please force regrade this submission to generate the professional report.',
+      ai_status: row.ai_status,
+    });
+  }
+
+  try {
+    const existingPath = resolveReportPdfPath(row.ai_report_pdf_path);
+    if (existingPath && fs.existsSync(existingPath)) {
+      return sendReportPdf(res, existingPath, portfolioId);
+    }
+
+    const pdf = await generateAiReportPdf({
+      portfolioId,
+      studentNo: row.student_no,
+      assignmentName: row.assignment_name,
+      courseName: row.course_name,
+      generatedDate: formatReportDate(row.graded_at),
+      aiScore: row.ai_grade,
+      reportText,
+    });
+
+    await query('UPDATE ai_grading SET ai_report_pdf_path=? WHERE portfolio_id=?', [pdf.storedPath, portfolioId]);
+    return sendReportPdf(res, pdf.absolutePath, portfolioId);
+  } catch (e) {
+    console.error('AI report PDF generation failed:', safeMessage(e));
+    return res.status(500).json({
+      error: 'PDF generation failed. AI report text is still available.',
+      details: safeMessage(e),
+    });
+  }
 }
 
 export async function setFinalGrade(req, res) {

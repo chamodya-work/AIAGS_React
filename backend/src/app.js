@@ -33,6 +33,11 @@ app.use('/uploads/rubrics', (req, res) => {
   res.status(403).json({ error: 'Access denied' });
 });
 
+// AI report PDFs must stay behind protected grading API routes.
+app.use('/uploads/reports', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
 // Uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

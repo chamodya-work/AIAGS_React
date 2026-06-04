@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import {
   getAiReport,
+  getAiReportPdf,
   getAssignmentGradingStatus,
   gradeOne,
   gradeAssignment,
@@ -17,6 +18,7 @@ router.post('/assignment/:assignmentId/ai', requireAuth, requireRole('admin','te
 router.get('/assignment/:assignmentId/status', requireAuth, requireRole('admin','teacher'), getAssignmentGradingStatus);
 router.get('/assignment/:assignmentId/results', requireAuth, requireRole('admin','teacher'), listResultsByAssignment);
 router.get('/portfolio/:id/report', requireAuth, requireRole('admin','teacher'), getAiReport);
+router.get('/portfolio/:id/report/pdf', requireAuth, requireRole('admin','teacher'), getAiReportPdf);
 router.post('/portfolio/:id/final', requireAuth, requireRole('admin','teacher'), setFinalGrade);
 router.post('/assignment/:assignmentId/publish', requireAuth, requireRole('admin','teacher'), publishAssignmentGrades);
 
