@@ -132,6 +132,13 @@ UNSAFE_FEEDBACK_PATTERNS = [
     r"\b\d{1,3}\s*%\b",
 ]
 
+FEEDBACK_SAFE_FALLBACKS = {
+    "overall_feedback": "Your submission has been reviewed for learning support. Focus on making your explanation clearer, more complete, and easier to follow.",
+    "main_improvement_areas": "Improve clarity, organization, evidence, and completeness in the main sections of your work.",
+    "practical_suggestions": "Review each section, add clearer explanations, support important statements, and check formatting before submitting again.",
+    "final_advice": "Revise your work carefully and use this feedback to strengthen your submission before official evaluation.",
+}
+
 
 def _truncate(text: str) -> str:
     text = (text or "").strip()
@@ -484,31 +491,59 @@ def _feedback_text_has_unsafe_content(text: str) -> Optional[str]:
     return None
 
 
+def _sanitize_feedback_text_value(value: Any, fallback: str) -> str:
+    text = str(value or "").replace("\r", "\n").strip()
+    if not text:
+        return fallback
+
+    safe_segments: List[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip(" -\t")
+        if not line:
+            continue
+
+        # Keep safe sentences and drop any sentence that mentions restricted grading/rubric language.
+        for segment in re.split(r"(?<=[.!?])\s+", line):
+            segment = segment.strip(" -\t")
+            if segment and not _feedback_text_has_unsafe_content(segment):
+                safe_segments.append(segment)
+
+    clean = " ".join(safe_segments).strip()
+    return clean or fallback
+
+
+def _sanitize_feedback_structured(obj: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = {}
+    for key in FEEDBACK_REQUIRED_KEYS:
+        fallback = FEEDBACK_SAFE_FALLBACKS[key]
+        value = obj.get(key)
+
+        if isinstance(value, list):
+            items = [
+                _sanitize_feedback_text_value(item, "")
+                for item in value
+            ]
+            sanitized[key] = [item for item in items if item] or [fallback]
+        else:
+            sanitized[key] = _sanitize_feedback_text_value(value, fallback)
+
+    return sanitized
+
+
 def _validate_feedback_structured(obj: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(obj, dict):
         raise ValueError("Model output is not an object.")
 
-    missing = [key for key in FEEDBACK_REQUIRED_KEYS if key not in obj]
-    if missing:
-        raise ValueError(f"Model output is missing keys: {', '.join(missing)}")
+    if not any(str(obj.get(key) or "").strip() for key in FEEDBACK_REQUIRED_KEYS):
+        raise ValueError("Model output did not include usable feedback sections.")
 
-    if any(key in obj for key in ("score", "grade", "marks", "grading_breakdown")):
-        raise ValueError("Model output included restricted grading fields.")
-
-    for key in FEEDBACK_REQUIRED_KEYS:
-        value = obj.get(key)
-        if isinstance(value, list):
-            if not any(str(item).strip() for item in value):
-                raise ValueError(f"Model output section is empty: {key}")
-        elif not str(value or "").strip():
-            raise ValueError(f"Model output section is empty: {key}")
-
-    rendered = _render_feedback(obj)
+    sanitized = _sanitize_feedback_structured(obj)
+    rendered = _render_feedback(sanitized)
     unsafe = _feedback_text_has_unsafe_content(rendered)
     if unsafe:
-        raise ValueError("Model output contained restricted grading or rubric language.")
+        raise ValueError("Sanitized feedback still contained restricted grading or rubric language.")
 
-    return obj
+    return sanitized
 
 
 def _call_ollama(prompt: str) -> Dict[str, Any]:
