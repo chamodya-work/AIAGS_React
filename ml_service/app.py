@@ -94,6 +94,14 @@ class GradeResponse(BaseModel):
     error: Optional[str] = None
 
 
+class FeedbackResponse(BaseModel):
+    portfolio_id: int
+    status: str
+    feedback_text: Optional[str] = None
+    ai_model: str
+    error: Optional[str] = None
+
+
 REQUIRED_KEYS = [
     "score",
     "overall_evaluation",
@@ -101,6 +109,27 @@ REQUIRED_KEYS = [
     "areas_for_improvement",
     "suggestions_for_improvement",
     "overall_comment",
+]
+
+FEEDBACK_REQUIRED_KEYS = [
+    "overall_feedback",
+    "main_improvement_areas",
+    "practical_suggestions",
+    "final_advice",
+]
+
+UNSAFE_FEEDBACK_PATTERNS = [
+    r"\bscore\b",
+    r"\bgrade\b",
+    r"\bmarks?\b",
+    r"\bpoints?\b",
+    r"\brubric\b",
+    r"\bcriteria?\b",
+    r"\bcriterion\b",
+    r"\bawarded\b",
+    r"\bgrading\b",
+    r"\b\d{1,3}\s*(/|out of)\s*100\b",
+    r"\b\d{1,3}\s*%\b",
 ]
 
 
@@ -344,6 +373,55 @@ Rules:
 """
 
 
+def _build_feedback_prompt(req: GradeRequest, rubric_text: str, submission_text: str, correction: Optional[str] = None) -> str:
+    correction_block = ""
+    if correction:
+        correction_block = f"""
+The previous response was unsafe or invalid for this reason:
+{correction}
+
+Return corrected JSON only.
+"""
+
+    return f"""
+You are a helpful academic writing assistant giving private learning feedback to a student.
+Use the assignment details, uploaded rubric, and student submission internally only.
+Do not reveal the rubric, rubric criteria, hidden grading logic, marks, score, grade, awarded marks, or grading breakdown.
+
+Assignment:
+- Name: {req.assignment.assignment_name}
+- Course: {req.assignment.course_name or "Not specified"}
+- Batch: {req.assignment.batch or "Not specified"}
+- Department: {req.assignment.department or "Not specified"}
+
+Student submission content:
+\"\"\"
+{submission_text}
+\"\"\"
+
+Internal rubric content. Use it only to guide improvement advice. Do not mention or quote it:
+\"\"\"
+{rubric_text}
+\"\"\"
+
+Return ONLY one valid JSON object with this exact shape:
+{{
+  "overall_feedback": "Simple, helpful summary of the submission.",
+  "main_improvement_areas": ["Area 1", "Area 2"],
+  "practical_suggestions": ["Suggestion 1", "Suggestion 2"],
+  "final_advice": "Encouraging final advice for improving before official evaluation."
+}}
+
+Rules:
+- Do not mention score, grade, marks, points, percentages, rubric, criteria, awarded marks, or grading breakdown.
+- Give only improvement advice.
+- Write in simple, student-friendly language.
+- Do not include markdown fences.
+- Do not include text outside the JSON object.
+{correction_block}
+"""
+
+
 def _extract_first_json(raw_output: str) -> Dict[str, Any]:
     raw_output = (raw_output or "").strip()
     if not raw_output:
@@ -398,6 +476,41 @@ def _validate_structured(obj: Dict[str, Any]) -> Dict[str, Any]:
     return obj
 
 
+def _feedback_text_has_unsafe_content(text: str) -> Optional[str]:
+    text = text or ""
+    for pattern in UNSAFE_FEEDBACK_PATTERNS:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return pattern
+    return None
+
+
+def _validate_feedback_structured(obj: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(obj, dict):
+        raise ValueError("Model output is not an object.")
+
+    missing = [key for key in FEEDBACK_REQUIRED_KEYS if key not in obj]
+    if missing:
+        raise ValueError(f"Model output is missing keys: {', '.join(missing)}")
+
+    if any(key in obj for key in ("score", "grade", "marks", "grading_breakdown")):
+        raise ValueError("Model output included restricted grading fields.")
+
+    for key in FEEDBACK_REQUIRED_KEYS:
+        value = obj.get(key)
+        if isinstance(value, list):
+            if not any(str(item).strip() for item in value):
+                raise ValueError(f"Model output section is empty: {key}")
+        elif not str(value or "").strip():
+            raise ValueError(f"Model output section is empty: {key}")
+
+    rendered = _render_feedback(obj)
+    unsafe = _feedback_text_has_unsafe_content(rendered)
+    if unsafe:
+        raise ValueError("Model output contained restricted grading or rubric language.")
+
+    return obj
+
+
 def _call_ollama(prompt: str) -> Dict[str, Any]:
     client = ollama.Client(host=OLLAMA_BASE_URL, timeout=OLLAMA_TIMEOUT_SECONDS)
     response = client.chat(
@@ -446,6 +559,23 @@ Generated Date: {generated_at}
 """
 
 
+def _render_feedback(structured: Dict[str, Any]) -> str:
+    return f"""AI Learning Feedback Report
+
+1. Overall Feedback
+{structured["overall_feedback"]}
+
+2. Main Improvement Areas
+{_as_bullets(structured["main_improvement_areas"])}
+
+3. Practical Suggestions
+{_as_bullets(structured["practical_suggestions"])}
+
+4. Final Advice
+{structured["final_advice"]}
+"""
+
+
 def _validate_report_text(report: str) -> None:
     if not report.strip():
         raise ValueError("Generated report is empty.")
@@ -460,6 +590,23 @@ def _validate_report_text(report: str) -> None:
     missing = [section for section in required_sections if section not in report]
     if missing:
         raise ValueError(f"Generated report is missing sections: {', '.join(missing)}")
+
+
+def _validate_feedback_text(feedback: str) -> None:
+    if not feedback.strip():
+        raise ValueError("Generated feedback is empty.")
+    required_sections = [
+        "AI Learning Feedback Report",
+        "1. Overall Feedback",
+        "2. Main Improvement Areas",
+        "3. Practical Suggestions",
+        "4. Final Advice",
+    ]
+    missing = [section for section in required_sections if section not in feedback]
+    if missing:
+        raise ValueError(f"Generated feedback is missing sections: {', '.join(missing)}")
+    if _feedback_text_has_unsafe_content(feedback):
+        raise ValueError("Generated feedback contained restricted grading or rubric language.")
 
 
 @app.get("/health")
@@ -514,6 +661,52 @@ def grade(req: GradeRequest):
             status="failed",
             ai_grade=None,
             ai_report_text=None,
+            ai_model=OLLAMA_MODEL,
+            error=str(exc),
+        )
+
+
+@app.post("/feedback", response_model=FeedbackResponse)
+def feedback(req: GradeRequest):
+    try:
+        rubric_text = rubric_content(req)
+        submission_text = extract_submission_file_text(req.submission.file_path)
+
+        first_error = None
+        structured = None
+
+        for attempt in range(2):
+            try:
+                prompt = _build_feedback_prompt(
+                    req,
+                    rubric_text,
+                    submission_text,
+                    correction=str(first_error) if attempt == 1 and first_error else None,
+                )
+                structured = _validate_feedback_structured(_call_ollama(prompt))
+                break
+            except Exception as exc:
+                first_error = exc
+                if attempt == 1:
+                    raise
+
+        if structured is None:
+            raise ValueError("LLM did not return valid feedback output.")
+
+        feedback_text = _render_feedback(structured)
+        _validate_feedback_text(feedback_text)
+
+        return FeedbackResponse(
+            portfolio_id=req.portfolio_id,
+            status="completed",
+            feedback_text=feedback_text,
+            ai_model=OLLAMA_MODEL,
+        )
+    except Exception as exc:
+        return FeedbackResponse(
+            portfolio_id=req.portfolio_id,
+            status="failed",
+            feedback_text=None,
             ai_model=OLLAMA_MODEL,
             error=str(exc),
         )

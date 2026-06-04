@@ -173,6 +173,13 @@ export const api = {
   student: {
     dashboard: () => request('/api/student/dashboard'),
     result: (assignmentId) => request(`/api/student/results/${assignmentId}`),
+    feedbackAttempts: (assignmentId) => request(`/api/student/feedback/attempts/${assignmentId}`),
+    feedbackHistory: (assignmentId) => request(`/api/student/feedback/history/${assignmentId}`),
+    requestFeedback: (assignmentId) =>
+      request('/api/student/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ assignment_id: assignmentId }),
+      }),
   },
 
   // /api/auth/users  (admin only)

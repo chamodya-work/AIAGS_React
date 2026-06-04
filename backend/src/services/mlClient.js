@@ -45,3 +45,42 @@ export async function gradePortfolio(payload) {
     );
   }
 }
+
+export async function requestStudentFeedback(payload) {
+  const portfolioId = payload?.portfolio_id || payload?.portfolio?.portfolio_id;
+
+  try {
+    const resp = await axios.post(
+      `${ML_URL}/feedback`,
+      payload,
+      {
+        timeout: ML_TIMEOUT_MS,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+    return resp.data;
+  } catch (err) {
+    const status = err?.response?.status;
+    const data = err?.response?.data;
+    const code = err?.code;
+
+    console.error("ML requestStudentFeedback failed:", {
+      portfolioId,
+      code,
+      status,
+      message: err?.message,
+      mlError: data?.error || data?.detail || null,
+    });
+
+    throw new Error(
+      data?.error
+        ? `ML service error (${status}): ${data.error}`
+        : data?.detail
+          ? `ML service error (${status}): ${JSON.stringify(data.detail)}`
+          : status
+            ? `ML service error (${status})`
+            : `ML request failed: ${err?.message || String(err)}`
+    );
+  }
+}
