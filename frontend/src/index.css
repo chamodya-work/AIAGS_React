@@ -268,18 +268,70 @@ html, body, #root {
 }
 .data-table tbody tr:hover { background-color: #f8f9fa; }
 .data-table tbody tr:last-child td { border-bottom: none; }
+.assignment-form-card {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto 24px;
+  padding: 26px 30px;
+}
+.assignment-list-card {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.assignment-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 22px;
+}
+.assignment-field {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.assignment-field-full {
+  grid-column: 1 / -1;
+}
+.assignment-field label {
+  color: var(--text-dark);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.assignment-field .form-input,
+.assignment-field .form-select {
+  width: 100%;
+  min-width: 0;
+  flex: initial;
+  padding: 9px 12px;
+}
+.assignment-file-field .form-input {
+  max-width: 560px;
+  padding: 8px 10px;
+}
+.assignment-action-row {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
 .assignments-table {
   min-width: 900px;
 }
 .assignment-required-docs {
-  margin-top: 8px;
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 .required-docs-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .required-docs-header h2 {
   font-size: 16px;
@@ -287,14 +339,58 @@ html, body, #root {
 }
 .compact-table-container {
   margin-top: 0;
+  margin-bottom: 0;
+  background: white;
 }
 .required-docs-table {
-  min-width: 780px;
+  min-width: 720px;
+}
+.required-docs-table th {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.required-docs-table td {
+  padding: 10px 12px;
 }
 .required-docs-table .form-input,
 .required-docs-table .form-select {
   width: 100%;
   min-width: 150px;
+  padding: 8px 10px;
+}
+@media (max-width: 980px) {
+  .assignment-form-card,
+  .assignment-list-card {
+    max-width: 100%;
+  }
+  .assignment-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .assignment-field {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .main-content {
+    padding: 28px 20px;
+  }
+  .assignment-form-card,
+  .assignment-list-card {
+    padding: 22px 18px;
+  }
+  .assignment-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .assignment-file-field .form-input {
+    max-width: 100%;
+  }
+  .assignment-action-row {
+    justify-content: stretch;
+  }
+  .assignment-action-row .btn {
+    width: 100%;
+  }
 }
 .icon-btn {
   background: none;

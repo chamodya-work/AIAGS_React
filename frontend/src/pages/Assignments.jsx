@@ -181,156 +181,160 @@ export default function AssignmentsPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      <div className="content-card">
-        <div className="form-row">
-          <label className="form-label">Course:</label>
-          <select className="form-select" value={form.course_name} onChange={e => onCourseChange(e.target.value)}>
-            <option value="">Select Course</option>
-            {courses.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Department:</label>
-          <select className="form-select" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-            <option value="">Select Department</option>
-            {DEPTS.map(d => <option key={d}>{d}</option>)}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Batch:</label>
-          <select className="form-select" value={form.batch} onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}>
-            <option value="">Select Batch</option>
-            {batches.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Assignment Name:</label>
-          <input className="form-input" placeholder="Assignment name" value={form.assignment_name}
-            onChange={e => setForm(f => ({ ...f, assignment_name: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Remark:</label>
-          <input className="form-input" placeholder="Optional remark" value={form.remark}
-            onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Start Date:</label>
-          <input type="date" className="form-input" value={form.start_date}
-            onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Start Time:</label>
-          <input type="time" className="form-input" value={form.start_time}
-            onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Due Date:</label>
-          <input type="date" className="form-input" value={form.deadline_date}
-            onChange={e => setForm(f => ({ ...f, deadline_date: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Due Time:</label>
-          <input type="time" className="form-input" value={form.deadline_time}
-            onChange={e => setForm(f => ({ ...f, deadline_time: e.target.value }))} />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Guideline Document:</label>
-          <input
-            type="file"
-            ref={guidelineRef}
-            className="form-input"
-            accept=".pdf,.docx,.txt"
-            onChange={e => setGuidelineFile(e.target.files?.[0] || null)}
-          />
-        </div>
-
-        <div className="form-row">
-          <label className="form-label">Rubric:</label>
-          <input
-            type="file"
-            ref={rubricRef}
-            className="form-input"
-            accept=".xlsx,.xls,.csv,.pdf,.docx"
-            onChange={e => setRubricFile(e.target.files?.[0] || null)}
-          />
-        </div>
-
-        <div className="assignment-required-docs">
-          <div className="required-docs-header">
-            <h2>Required Documents</h2>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={addRequiredDocRow}>
-              Add Row
-            </button>
+      <div className="content-card assignment-form-card">
+        <div className="assignment-form-grid">
+          <div className="assignment-field">
+            <label>Course</label>
+            <select className="form-select" value={form.course_name} onChange={e => onCourseChange(e.target.value)}>
+              <option value="">Select Course</option>
+              {courses.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
-          <div className="table-container compact-table-container">
-            <table className="data-table required-docs-table">
-              <thead>
-                <tr>
-                  <th>Required Document Name</th>
-                  <th>Allowed File Type</th>
-                  <th>Mandatory</th>
-                  <th>Remove</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requiredDocs.map((row, index) => (
-                  <tr key={index}>
-                    <td>
-                      <input
-                        className="form-input"
-                        placeholder="Case Study Report"
-                        value={row.document_name}
-                        onChange={e => updateRequiredDoc(index, { document_name: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        className="form-select"
-                        value={row.allowed_file_type}
-                        onChange={e => updateRequiredDoc(index, { allowed_file_type: e.target.value })}
-                      >
-                        {REQUIRED_DOC_TYPE_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        className="form-select"
-                        value={row.is_mandatory ? 'mandatory' : 'optional'}
-                        onChange={e => updateRequiredDoc(index, { is_mandatory: e.target.value === 'mandatory' })}
-                      >
-                        <option value="mandatory">Mandatory</option>
-                        <option value="optional">Optional</option>
-                      </select>
-                    </td>
-                    <td>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => removeRequiredDocRow(index)}>
-                        Remove
-                      </button>
-                    </td>
+
+          <div className="assignment-field">
+            <label>Department</label>
+            <select className="form-select" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
+              <option value="">Select Department</option>
+              {DEPTS.map(d => <option key={d}>{d}</option>)}
+            </select>
+          </div>
+
+          <div className="assignment-field assignment-field-full">
+            <label>Batch</label>
+            <select className="form-select" value={form.batch} onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}>
+              <option value="">Select Batch</option>
+              {batches.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+
+          <div className="assignment-field assignment-field-full">
+            <label>Assignment Name</label>
+            <input className="form-input" placeholder="Assignment name" value={form.assignment_name}
+              onChange={e => setForm(f => ({ ...f, assignment_name: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field assignment-field-full">
+            <label>Remark</label>
+            <input className="form-input" placeholder="Optional remark" value={form.remark}
+              onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field">
+            <label>Start Date</label>
+            <input type="date" className="form-input" value={form.start_date}
+              onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field">
+            <label>Start Time</label>
+            <input type="time" className="form-input" value={form.start_time}
+              onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field">
+            <label>Due Date</label>
+            <input type="date" className="form-input" value={form.deadline_date}
+              onChange={e => setForm(f => ({ ...f, deadline_date: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field">
+            <label>Due Time</label>
+            <input type="time" className="form-input" value={form.deadline_time}
+              onChange={e => setForm(f => ({ ...f, deadline_time: e.target.value }))} />
+          </div>
+
+          <div className="assignment-field assignment-field-full assignment-file-field">
+            <label>Guideline Document</label>
+            <input
+              type="file"
+              ref={guidelineRef}
+              className="form-input"
+              accept=".pdf,.docx,.txt"
+              onChange={e => setGuidelineFile(e.target.files?.[0] || null)}
+            />
+          </div>
+
+          <div className="assignment-field assignment-field-full assignment-file-field">
+            <label>Rubric</label>
+            <input
+              type="file"
+              ref={rubricRef}
+              className="form-input"
+              accept=".xlsx,.xls,.csv,.pdf,.docx"
+              onChange={e => setRubricFile(e.target.files?.[0] || null)}
+            />
+          </div>
+
+          <div className="assignment-required-docs assignment-field-full">
+            <div className="required-docs-header">
+              <h2>Required Documents</h2>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addRequiredDocRow}>
+                Add Row
+              </button>
+            </div>
+            <div className="table-container compact-table-container">
+              <table className="data-table required-docs-table">
+                <thead>
+                  <tr>
+                    <th>Required Document Name</th>
+                    <th>Allowed File Type</th>
+                    <th>Mandatory</th>
+                    <th>Remove</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {requiredDocs.map((row, index) => (
+                    <tr key={index}>
+                      <td>
+                        <input
+                          className="form-input"
+                          placeholder="Case Study Report"
+                          value={row.document_name}
+                          onChange={e => updateRequiredDoc(index, { document_name: e.target.value })}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          value={row.allowed_file_type}
+                          onChange={e => updateRequiredDoc(index, { allowed_file_type: e.target.value })}
+                        >
+                          {REQUIRED_DOC_TYPE_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          value={row.is_mandatory ? 'mandatory' : 'optional'}
+                          onChange={e => updateRequiredDoc(index, { is_mandatory: e.target.value === 'mandatory' })}
+                        >
+                          <option value="mandatory">Mandatory</option>
+                          <option value="optional">Optional</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => removeRequiredDocRow(index)}>
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
-        <div className="action-row">
+        <div className="action-row assignment-action-row">
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
             {saving ? 'Saving...' : 'ADD ASSIGNMENT'}
           </button>
         </div>
+      </div>
 
+      <div className="content-card assignment-list-card">
         {loading ? (
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
