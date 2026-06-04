@@ -115,12 +115,15 @@ export const api = {
 
   // /api/grading
   grading: {
-    gradePortfolioAI: (portfolioId) =>
-      request(`/api/grading/portfolio/${portfolioId}/ai`, { method: 'POST' }),
-    gradeAssignmentAI: (assignmentId) =>
-      request(`/api/grading/assignment/${assignmentId}/ai`, { method: 'POST' }),
+    gradePortfolioAI: (portfolioId, options = {}) =>
+      request(`/api/grading/portfolio/${portfolioId}/ai`, { method: 'POST', body: JSON.stringify(options) }),
+    gradeAssignmentAI: (assignmentId, options = {}) =>
+      request(`/api/grading/assignment/${assignmentId}/ai`, { method: 'POST', body: JSON.stringify(options) }),
+    statusByAssignment: (assignmentId) =>
+      request(`/api/grading/assignment/${assignmentId}/status`),
     resultsByAssignment: (assignmentId) =>
       request(`/api/grading/assignment/${assignmentId}/results`),
+    report: (portfolioId) => request(`/api/grading/portfolio/${portfolioId}/report`),
     // Backend expects: { final_grade: number, status?: 'DRAFT'|'PUBLISHED' }
     setFinal: (portfolioId, payload) =>
       request(`/api/grading/portfolio/${portfolioId}/final`, {

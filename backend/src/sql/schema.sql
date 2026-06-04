@@ -64,7 +64,15 @@ CREATE TABLE IF NOT EXISTS rubrics (
   rubric_name VARCHAR(255) NOT NULL,
   assignment_id INT NOT NULL,
   rubric_text LONGTEXT NULL,
+  rubric_file_path VARCHAR(1000) NULL,
+  rubric_file_original_name VARCHAR(255) NULL,
+  rubric_file_mime VARCHAR(255) NULL,
+  rubric_extracted_text LONGTEXT NULL,
+  rubric_extraction_status ENUM('pending','extracted','failed') DEFAULT 'pending',
+  rubric_extraction_error TEXT NULL,
+  extracted_at TIMESTAMP NULL,
   create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   created_by INT NULL,
   CONSTRAINT fk_rubric_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
   CONSTRAINT fk_rubric_created_by FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
@@ -84,9 +92,18 @@ CREATE TABLE IF NOT EXISTS portfolios (
 -- AI_Grading
 CREATE TABLE IF NOT EXISTS ai_grading (
   portfolio_id INT PRIMARY KEY,
+  rubric_id INT NULL,
   ai_grade DECIMAL(5,2) NULL,
   ai_review_report LONGTEXT NULL,
-  graded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ai_status ENUM('pending','processing','graded','failed') DEFAULT 'pending',
+  ai_report_text LONGTEXT NULL,
+  ai_report_pdf_path VARCHAR(1000) NULL,
+  ai_grading_error TEXT NULL,
+  ai_grading_technical_error LONGTEXT NULL,
+  ai_model VARCHAR(100) NULL,
+  grading_started_at TIMESTAMP NULL,
+  graded_at TIMESTAMP NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_ai_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE
 );
 

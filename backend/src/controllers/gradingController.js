@@ -1,91 +1,344 @@
 import path from 'path';
+import fs from 'fs';
+import { z } from 'zod';
 import { query } from '../db.js';
 import { gradePortfolio } from '../services/mlClient.js';
-import { z } from 'zod';
-import fs from "fs";
-
 
 const finalSchema = z.object({
   final_grade: z.coerce.number().min(0).max(100),
   status: z.enum(['DRAFT', 'PUBLISHED']).optional()
 });
 
+const gradeOptionsSchema = z.object({
+  forceRegrade: z.boolean().optional()
+});
+
+const REQUIRED_REPORT_SECTIONS = [
+  'Overall Evaluation',
+  'Strengths of the Submission',
+  'Areas That Need Improvement',
+  'Suggestions for Improvement',
+  'Overall Comment',
+];
+
+function resolveUploadPath(filePath) {
+  if (!filePath) return null;
+  return path.resolve(process.cwd(), filePath.replace(/^\/+/, '').replace(/\//g, path.sep));
+}
+
+function safeMessage(error) {
+  return String(error?.message || error || 'Unknown grading error');
+}
+
+function validateAiResult(result) {
+  if (result?.status === 'failed') {
+    throw new Error(result.error || 'AI grading failed');
+  }
+
+  const score = Number(result?.ai_grade);
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    throw new Error('ML service returned an invalid AI score');
+  }
+
+  const report = String(result?.ai_report_text || result?.ai_review_report || '').trim();
+  if (!report) throw new Error('ML service returned an empty AI report');
+
+  const missing = REQUIRED_REPORT_SECTIONS.filter((section) => !report.includes(section));
+  if (missing.length) {
+    throw new Error(`ML service report is missing required section(s): ${missing.join(', ')}`);
+  }
+
+  return { score, report };
+}
+
+function looksLikeRawJson(value) {
+  return /^[\s\r\n]*[\[{]/.test(String(value || ''));
+}
+
+async function markProcessing(portfolioId, rubricId) {
+  await query(
+    `INSERT INTO ai_grading
+      (portfolio_id, rubric_id, ai_status, ai_grade, ai_review_report, ai_report_text,
+       ai_grading_error, ai_grading_technical_error, grading_started_at, graded_at)
+     VALUES (?, ?, 'processing', NULL, NULL, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL)
+     ON DUPLICATE KEY UPDATE
+       rubric_id=VALUES(rubric_id),
+       ai_status='processing',
+       ai_grading_error=NULL,
+       ai_grading_technical_error=NULL,
+       grading_started_at=CURRENT_TIMESTAMP`,
+    [portfolioId, rubricId || null]
+  );
+}
+
+async function markFailed(portfolioId, rubricId, error, technicalError = null) {
+  const message = safeMessage(error);
+  await query(
+    `INSERT INTO ai_grading
+      (portfolio_id, rubric_id, ai_status, ai_grading_error, ai_grading_technical_error)
+     VALUES (?, ?, 'failed', ?, ?)
+     ON DUPLICATE KEY UPDATE
+       rubric_id=VALUES(rubric_id),
+       ai_status='failed',
+       ai_grading_error=VALUES(ai_grading_error),
+       ai_grading_technical_error=VALUES(ai_grading_technical_error)`,
+    [portfolioId, rubricId || null, message, technicalError || message]
+  );
+  return message;
+}
+
+async function markGraded(portfolioId, rubricId, result) {
+  const { score, report } = validateAiResult(result);
+
+  await query(
+    `INSERT INTO ai_grading
+      (portfolio_id, rubric_id, ai_grade, ai_review_report, ai_status, ai_report_text,
+       ai_grading_error, ai_grading_technical_error, ai_model, graded_at)
+     VALUES (?, ?, ?, ?, 'graded', ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       rubric_id=VALUES(rubric_id),
+       ai_grade=VALUES(ai_grade),
+       ai_review_report=VALUES(ai_review_report),
+       ai_status='graded',
+       ai_report_text=VALUES(ai_report_text),
+       ai_grading_error=NULL,
+       ai_grading_technical_error=NULL,
+       ai_model=VALUES(ai_model),
+       graded_at=CURRENT_TIMESTAMP`,
+    [
+      portfolioId,
+      rubricId || null,
+      score,
+      report,
+      report,
+      result.ai_model || result.model || null,
+    ]
+  );
+}
+
+async function getLatestRubric(assignmentId) {
+  return (
+    await query(
+      `SELECT *
+       FROM rubrics
+       WHERE assignment_id=?
+       ORDER BY create_date DESC, rubric_id DESC
+       LIMIT 1`,
+      [assignmentId]
+    )
+  )[0];
+}
+
+async function getPortfolioForGrading(portfolioId) {
+  return (
+    await query(
+      `SELECT p.portfolio_id, p.student_no, p.portfolio_link, p.upload_date,
+              a.assignment_id, a.assignment_name, a.course_name, a.batch, a.department,
+              a.start_date, a.deadline_date, a.remark
+       FROM portfolios p
+       JOIN assignments a ON a.assignment_id = p.assignment_id
+       WHERE p.portfolio_id=?`,
+      [portfolioId]
+    )
+  )[0];
+}
+
+function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath) {
+  return {
+    portfolio_id: portfolio.portfolio_id,
+    assignment: {
+      assignment_id: portfolio.assignment_id,
+      assignment_name: portfolio.assignment_name,
+      course_name: portfolio.course_name,
+      batch: portfolio.batch,
+      department: portfolio.department,
+      start_date: portfolio.start_date,
+      deadline_date: portfolio.deadline_date,
+      remark: portfolio.remark,
+    },
+    student: {
+      student_no: portfolio.student_no,
+    },
+    rubric: {
+      rubric_id: rubric.rubric_id,
+      rubric_name: rubric.rubric_name,
+      rubric_text: rubric.rubric_text || rubric.rubric_extracted_text || null,
+      file_path: rubricFilePath,
+      file_mime: rubric.rubric_file_mime || null,
+      file_original_name: rubric.rubric_file_original_name || null,
+    },
+    submission: {
+      portfolio_id: portfolio.portfolio_id,
+      file_path: portfolioFilePath,
+      portfolio_link: portfolio.portfolio_link,
+      uploaded_at: portfolio.upload_date,
+    },
+  };
+}
+
+async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = {}) {
+  const portfolio = await getPortfolioForGrading(portfolioId);
+  if (!portfolio) return { portfolio_id: portfolioId, ok: false, status: 'failed', error: 'Portfolio not found' };
+
+  const existing = (
+    await query('SELECT * FROM ai_grading WHERE portfolio_id=?', [portfolioId])
+  )[0];
+
+  if (existing?.ai_status === 'processing') {
+    return { portfolio_id: portfolioId, ok: false, status: 'processing', skipped: true, error: 'AI grading is already processing' };
+  }
+
+  if (existing?.ai_status === 'graded' && !forceRegrade) {
+    return { portfolio_id: portfolioId, ok: true, status: 'graded', skipped: true, message: 'Already graded' };
+  }
+
+  const rubric = await getLatestRubric(portfolio.assignment_id);
+
+  try {
+    if (!rubric) {
+      await markFailed(portfolioId, null, 'No rubric is attached to this assignment');
+      return { portfolio_id: portfolioId, ok: false, status: 'failed', error: 'No rubric is attached to this assignment' };
+    }
+
+    const portfolioFilePath = resolveUploadPath(portfolio.portfolio_link);
+    if (!portfolioFilePath || !fs.existsSync(portfolioFilePath)) {
+      const message = 'Student submission file is missing on disk';
+      await markFailed(portfolioId, rubric.rubric_id, message);
+      return { portfolio_id: portfolioId, ok: false, status: 'failed', error: message };
+    }
+
+    const rubricFilePath = rubric.rubric_file_path ? resolveUploadPath(rubric.rubric_file_path) : null;
+    if (!rubric.rubric_text && (!rubricFilePath || !fs.existsSync(rubricFilePath))) {
+      const message = 'Rubric content or rubric file is missing';
+      await markFailed(portfolioId, rubric.rubric_id, message);
+      return { portfolio_id: portfolioId, ok: false, status: 'failed', error: message };
+    }
+
+    await markProcessing(portfolioId, rubric.rubric_id);
+
+    const mlResult = await gradePortfolio(
+      buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath)
+    );
+
+    await markGraded(portfolioId, rubric.rubric_id, mlResult);
+    return { portfolio_id: portfolioId, ok: true, status: 'graded' };
+  } catch (e) {
+    const error = await markFailed(portfolioId, rubric?.rubric_id || null, e);
+    return { portfolio_id: portfolioId, ok: false, status: 'failed', error };
+  }
+}
+
 export async function gradeOne(req, res) {
   try {
     const portfolioId = Number(req.params.id);
-    const pRows = await query('SELECT p.portfolio_id, p.portfolio_link, p.assignment_id FROM portfolios p WHERE p.portfolio_id=?', [portfolioId]);
-    const portfolio = pRows[0];
-    if (!portfolio) return res.status(404).json({ error: 'Portfolio not found' });
+    const options = gradeOptionsSchema.parse(req.body || {});
 
-    const rubricRows = await query('SELECT rubric_text FROM rubrics WHERE assignment_id=? ORDER BY create_date DESC LIMIT 1', [portfolio.assignment_id]);
-    const rubricText = rubricRows[0]?.rubric_text || null;
+    const result = await runAiGradingForPortfolio(portfolioId, options);
+    const out = (await query('SELECT * FROM ai_grading WHERE portfolio_id=?', [portfolioId]))[0] || null;
 
-    const absFilePath = path.resolve(process.cwd(), portfolio.portfolio_link.replace(/^\//, ''));
-
-    // ✅ FILE CHECK
-    if (!fs.existsSync(absFilePath)) {
-      throw new Error(`Portfolio file not found at: ${absFilePath}`);
-    }
-
-    const result = await gradePortfolio({
-      portfolioId,
-      filePath: absFilePath,
-      rubricText
-    });
-
-    await query(
-      'INSERT INTO ai_grading (portfolio_id, ai_grade, ai_review_report) VALUES (?,?,?) ON DUPLICATE KEY UPDATE ai_grade=VALUES(ai_grade), ai_review_report=VALUES(ai_review_report), graded_at=CURRENT_TIMESTAMP',
-      [portfolioId, result.ai_grade ?? null, result.ai_review_report ?? null]
-    );
-
-    const out = (await query('SELECT * FROM ai_grading WHERE portfolio_id=?', [portfolioId]))[0];
-    res.json({ ai: out });
+    res.json({ result, ai: out });
   } catch (e) {
+    if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
     console.error(e);
-    res.status(500).json({ error: 'Grading failed', details: String(e?.message || e) });
+    res.status(500).json({ error: 'Grading failed', details: safeMessage(e) });
   }
 }
 
 export async function gradeAssignment(req, res) {
-  const assignmentId = Number(req.params.assignmentId);
-  const portfolios = await query('SELECT portfolio_id FROM portfolios WHERE assignment_id=?', [assignmentId]);
-  const results = [];
-  for (const p of portfolios) {
-    // grade sequentially to keep it simple and avoid overloading the ML service
-    // (you can parallelize later)
-    try {
-      const fakeReq = { params: { id: p.portfolio_id } };
-      // reuse gradeOne logic by calling directly is messy; do simple call
-      const pRows = await query('SELECT portfolio_id, portfolio_link, assignment_id FROM portfolios WHERE portfolio_id=?', [p.portfolio_id]);
-      const portfolio = pRows[0];
-      if (!portfolio) continue;
+  try {
+    const assignmentId = Number(req.params.assignmentId);
+    const options = gradeOptionsSchema.parse(req.body || {});
 
-      const rubricRows = await query('SELECT rubric_text FROM rubrics WHERE assignment_id=? ORDER BY create_date DESC LIMIT 1', [portfolio.assignment_id]);
-      const rubricText = rubricRows[0]?.rubric_text || null;
-      const absFilePath = path.resolve(process.cwd(), portfolio.portfolio_link.replace(/^\//, ''));
+    const portfolios = await query(
+      `SELECT p.portfolio_id
+       FROM portfolios p
+       LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
+       WHERE p.assignment_id=?
+         AND (
+           ? = TRUE
+           OR ag.portfolio_id IS NULL
+           OR ag.ai_status IN ('pending','failed')
+         )
+       ORDER BY p.upload_date ASC`,
+      [assignmentId, options.forceRegrade === true]
+    );
 
-      // ✅ FILE CHECK
-      if (!fs.existsSync(absFilePath)) {
-        throw new Error(`Portfolio file not found at: ${absFilePath}`);
-      }
-
-      const result = await gradePortfolio({
-        portfolioId: portfolio.portfolio_id,
-        filePath: absFilePath,
-        rubricText
-      });
-
-      await query(
-        'INSERT INTO ai_grading (portfolio_id, ai_grade, ai_review_report) VALUES (?,?,?) ON DUPLICATE KEY UPDATE ai_grade=VALUES(ai_grade), ai_review_report=VALUES(ai_review_report), graded_at=CURRENT_TIMESTAMP',
-        [portfolio.portfolio_id, result.ai_grade ?? null, result.ai_review_report ?? null]
-      );
-
-      results.push({ portfolio_id: portfolio.portfolio_id, ok: true });
-    } catch (e) {
-      results.push({ portfolio_id: p.portfolio_id, ok: false, error: String(e?.message || e) });
+    const results = [];
+    for (const p of portfolios) {
+      const result = await runAiGradingForPortfolio(p.portfolio_id, options);
+      results.push(result);
     }
+
+    res.json({ assignment_id: assignmentId, results });
+  } catch (e) {
+    if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
+    console.error(e);
+    res.status(500).json({ error: 'Assignment grading failed', details: safeMessage(e) });
   }
-  res.json({ assignment_id: assignmentId, results });
+}
+
+export async function getAssignmentGradingStatus(req, res) {
+  const assignmentId = Number(req.params.assignmentId);
+  const rows = await query(
+    `SELECT p.portfolio_id, p.student_no, ag.ai_status, ag.ai_grade,
+            ag.ai_grading_error, ag.ai_model, ag.grading_started_at, ag.graded_at
+     FROM portfolios p
+     LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
+     WHERE p.assignment_id=?
+     ORDER BY p.upload_date DESC`,
+    [assignmentId]
+  );
+
+  res.json({
+    assignment_id: assignmentId,
+    statuses: rows.map((row) => ({
+      ...row,
+      ai_status: row.ai_status || 'pending',
+    })),
+  });
+}
+
+export async function getAiReport(req, res) {
+  const portfolioId = Number(req.params.id);
+  const row = (
+    await query(
+      `SELECT ag.portfolio_id, ag.ai_status, ag.ai_grade, ag.ai_report_text, ag.ai_review_report,
+              ag.ai_grading_error, ag.ai_model, ag.graded_at,
+              p.student_no, a.assignment_name, a.course_name
+       FROM ai_grading ag
+       JOIN portfolios p ON p.portfolio_id = ag.portfolio_id
+       JOIN assignments a ON a.assignment_id = p.assignment_id
+       WHERE ag.portfolio_id=?`,
+      [portfolioId]
+    )
+  )[0];
+
+  if (!row) return res.status(404).json({ error: 'AI report not found' });
+  if (row.ai_status !== 'graded') {
+    return res.status(409).json({ error: row.ai_grading_error || 'AI grading is not complete', ai_status: row.ai_status });
+  }
+
+  const reportText = row.ai_report_text || row.ai_review_report;
+  if (looksLikeRawJson(reportText)) {
+    return res.status(409).json({
+      error: 'This is a legacy AI report format. Please force regrade this submission to generate the professional report.',
+      ai_status: row.ai_status,
+    });
+  }
+
+  res.json({
+    report: {
+      portfolio_id: row.portfolio_id,
+      student_no: row.student_no,
+      assignment_name: row.assignment_name,
+      course_name: row.course_name,
+      ai_grade: row.ai_grade,
+      ai_status: row.ai_status,
+      ai_model: row.ai_model,
+      graded_at: row.graded_at,
+      ai_report_text: reportText,
+    },
+  });
 }
 
 export async function setFinalGrade(req, res) {
@@ -115,7 +368,9 @@ export async function listResultsByAssignment(req, res) {
   const rows = await query(
     `
     SELECT p.portfolio_id, p.student_no, p.portfolio_link, p.upload_date,
-           ag.ai_grade, ag.ai_review_report,
+           ag.rubric_id, ag.ai_grade, ag.ai_review_report, ag.ai_status,
+           ag.ai_report_text, ag.ai_grading_error, ag.ai_model,
+           ag.grading_started_at, ag.graded_at,
            fg.final_grade, fg.status
     FROM portfolios p
     LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
@@ -125,7 +380,14 @@ export async function listResultsByAssignment(req, res) {
     `,
     [assignmentId]
   );
-  res.json({ results: rows });
+
+  res.json({
+    results: rows.map((row) => ({
+      ...row,
+      ai_status: row.ai_status || 'pending',
+      ai_review_report: row.ai_report_text || row.ai_review_report,
+    })),
+  });
 }
 
 export async function publishAssignmentGrades(req, res) {

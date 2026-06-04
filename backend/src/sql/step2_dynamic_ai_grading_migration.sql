@@ -1,0 +1,144 @@
+-- Step 2: Dynamic AI grading support.
+-- Idempotent MySQL migration using INFORMATION_SCHEMA checks.
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_file_path'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_file_path VARCHAR(1000) NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_file_original_name'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_file_original_name VARCHAR(255) NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_file_mime'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_file_mime VARCHAR(255) NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_extracted_text'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_extracted_text LONGTEXT NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_extraction_status'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_extraction_status ENUM(''pending'',''extracted'',''failed'') DEFAULT ''pending'''
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='rubric_extraction_error'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN rubric_extraction_error TEXT NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='extracted_at'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN extracted_at TIMESTAMP NULL'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='rubrics' AND COLUMN_NAME='updated_at'),
+    'SELECT 1',
+    'ALTER TABLE rubrics ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='rubric_id'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN rubric_id INT NULL AFTER portfolio_id'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_status'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_status ENUM(''pending'',''processing'',''graded'',''failed'') DEFAULT ''pending'' AFTER ai_review_report'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_report_text'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_report_text LONGTEXT NULL AFTER ai_status'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_report_pdf_path'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_report_pdf_path VARCHAR(1000) NULL AFTER ai_report_text'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_grading_error'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_grading_error TEXT NULL AFTER ai_report_pdf_path'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_grading_technical_error'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_grading_technical_error LONGTEXT NULL AFTER ai_grading_error'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='ai_model'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN ai_model VARCHAR(100) NULL AFTER ai_grading_technical_error'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='grading_started_at'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN grading_started_at TIMESTAMP NULL AFTER ai_model'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql := (
+  SELECT IF(EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ai_grading' AND COLUMN_NAME='updated_at'),
+    'SELECT 1',
+    'ALTER TABLE ai_grading ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+  )
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+UPDATE ai_grading
+SET ai_status = 'graded',
+    ai_report_text = COALESCE(ai_report_text, ai_review_report)
+WHERE ai_grade IS NOT NULL
+  AND ai_status IN ('pending', 'processing');
