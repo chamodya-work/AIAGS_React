@@ -34,6 +34,7 @@ html, body, #root {
 
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 40px 50px;
   overflow-y: auto;
   background-color: #e5e7eb;
@@ -233,7 +234,7 @@ html, body, #root {
 .table-container {
   border: 1px solid #ddd;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
   margin-top: 24px;
   margin-bottom: 20px;
 }
@@ -271,6 +272,105 @@ html, body, #root {
   transition: transform 0.15s;
 }
 .icon-btn:hover { transform: scale(1.15); }
+
+/* Grading table */
+.grading-table {
+  min-width: 1320px;
+}
+.grading-table th,
+.grading-table td {
+  padding: 10px 12px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.grading-table th {
+  font-size: 12px;
+}
+.grading-score-cell {
+  font-weight: 700;
+  color: #2196F3;
+}
+.grading-score-input {
+  width: 86px;
+  min-width: 86px;
+  padding: 8px 10px;
+}
+.grading-error-cell {
+  min-width: 200px;
+  max-width: 260px;
+  white-space: normal !important;
+  font-size: 12px !important;
+  line-height: 1.4;
+  color: #b00020 !important;
+}
+.grading-button-group,
+.grading-action-group {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.grading-button-group {
+  flex-direction: column;
+  width: 116px;
+}
+.grading-action-group {
+  flex-wrap: wrap;
+  min-width: 168px;
+}
+.grading-table .btn-sm {
+  padding: 5px 9px;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.grading-button-group .btn-sm {
+  width: 100%;
+}
+.grading-report-row:hover {
+  background: #f8fafc !important;
+}
+.grading-report-cell {
+  padding: 0 12px 16px !important;
+  background: #f8fafc;
+  white-space: normal !important;
+}
+.grading-report-panel {
+  border: 1px solid #d8e1ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+.grading-report-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin-bottom: 10px;
+}
+.grading-report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  color: #555;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.grading-report-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #333;
+}
+.grading-report-state {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 6px 0;
+}
+.grading-inline-alert {
+  margin-bottom: 0;
+}
 
 /* ── Status badges ───────────────────────────────────────── */
 .badge {

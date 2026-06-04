@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { api } from '../api/api';
 
 const AI_STATUS_BADGE = {
@@ -7,6 +7,8 @@ const AI_STATUS_BADGE = {
   graded: 'badge-success',
   failed: 'badge-danger',
 };
+
+const TABLE_COLUMN_COUNT = 10;
 
 export default function GradingPage() {
   const [courses, setCourses] = useState([]);
@@ -23,8 +25,10 @@ export default function GradingPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [finalScores, setFinalScores] = useState({});
-  const [report, setReport] = useState(null);
-  const [reportLoading, setReportLoading] = useState(false);
+  const [openReportId, setOpenReportId] = useState(null);
+  const [reportsByPortfolio, setReportsByPortfolio] = useState({});
+  const [reportErrorsByPortfolio, setReportErrorsByPortfolio] = useState({});
+  const [reportLoadingByPortfolio, setReportLoadingByPortfolio] = useState({});
   const [pdfDownloading, setPdfDownloading] = useState(null);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ export default function GradingPage() {
   }, []);
 
   const onCourseChange = async (cn) => {
-    setSelCourse(cn); setSelBatch(''); setSelAssignment(''); setResults([]); setRubric(null); setReport(null);
+    setSelCourse(cn); setSelBatch(''); setSelAssignment(''); setResults([]); setRubric(null); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
     if (cn) {
       try { const d = await api.batches.list({ course_name: cn }); setBatches(d.batches || []); }
       catch { setBatches([]); }
@@ -42,7 +46,7 @@ export default function GradingPage() {
   };
 
   const onBatchChange = async (batch) => {
-    setSelBatch(batch); setSelAssignment(''); setResults([]); setRubric(null); setReport(null);
+    setSelBatch(batch); setSelAssignment(''); setResults([]); setRubric(null); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
     if (batch && selCourse) {
       try {
         const d = await api.assignments.list({ course_name: selCourse, batch });
@@ -70,13 +74,13 @@ export default function GradingPage() {
   };
 
   const onAssignmentChange = async (aId) => {
-    setSelAssignment(aId); setResults([]); setRubric(null); setFinalScores({}); setReport(null);
+    setSelAssignment(aId); setResults([]); setRubric(null); setFinalScores({}); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
     if (aId) await loadResults(aId);
   };
 
   const handleGradeAll = async (forceRegrade = false) => {
     if (!selAssignment) { setError('Select an assignment first.'); return; }
-    setError(''); setSuccess(''); setGrading(true); setReport(null);
+    setError(''); setSuccess(''); setGrading(true); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
     try {
       const data = await api.grading.gradeAssignmentAI(selAssignment, { forceRegrade });
       await loadResults(selAssignment);
@@ -89,7 +93,7 @@ export default function GradingPage() {
   };
 
   const handleGradeOne = async (portfolioId, forceRegrade = false) => {
-    setError(''); setSuccess(''); setReport(null);
+    setError(''); setSuccess(''); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
     try {
       const data = await api.grading.gradePortfolioAI(portfolioId, { forceRegrade });
       await loadResults(selAssignment);
@@ -99,15 +103,25 @@ export default function GradingPage() {
   };
 
   const handleViewReport = async (portfolioId) => {
-    setReportLoading(true);
+    if (openReportId === portfolioId) {
+      setOpenReportId(null);
+      return;
+    }
+
+    setOpenReportId(portfolioId);
     setError('');
+    setReportErrorsByPortfolio(prev => ({ ...prev, [portfolioId]: '' }));
+
+    if (reportsByPortfolio[portfolioId]) return;
+
+    setReportLoadingByPortfolio(prev => ({ ...prev, [portfolioId]: true }));
     try {
       const data = await api.grading.report(portfolioId);
-      setReport(data.report || null);
+      setReportsByPortfolio(prev => ({ ...prev, [portfolioId]: data.report || null }));
     } catch (err) {
-      setError(err.message);
+      setReportErrorsByPortfolio(prev => ({ ...prev, [portfolioId]: err.message }));
     } finally {
-      setReportLoading(false);
+      setReportLoadingByPortfolio(prev => ({ ...prev, [portfolioId]: false }));
     }
   };
 
@@ -193,7 +207,7 @@ export default function GradingPage() {
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
           <div className="table-container">
-            <table className="data-table">
+            <table className="data-table grading-table">
               <thead>
                 <tr>
                   <th>Student No</th>
@@ -210,95 +224,117 @@ export default function GradingPage() {
               </thead>
               <tbody>
                 {results.length === 0 ? (
-                  <tr><td colSpan={10} style={{ textAlign:'center', color:'#999', padding:'32px' }}>
+                  <tr><td colSpan={TABLE_COLUMN_COUNT} style={{ textAlign:'center', color:'#999', padding:'32px' }}>
                     {selAssignment ? 'No submissions yet.' : 'Select an assignment.'}
                   </td></tr>
                 ) : results.map(r => {
                   const aiStatus = r.ai_status || 'pending';
                   const canRerun = aiStatus === 'pending' || aiStatus === 'failed';
+                  const isReportOpen = openReportId === r.portfolio_id;
+                  const isReportLoading = Boolean(reportLoadingByPortfolio[r.portfolio_id]);
+                  const rowReport = reportsByPortfolio[r.portfolio_id];
+                  const rowReportError = reportErrorsByPortfolio[r.portfolio_id];
                   return (
-                    <tr key={r.portfolio_id}>
-                      <td>{r.student_no}</td>
-                      <td>{r.upload_date ? new Date(r.upload_date).toLocaleDateString() : '-'}</td>
-                      <td>
-                        {r.portfolio_link && (
-                          <a href={r.portfolio_link} target="_blank" rel="noreferrer">
-                            <button className="icon-btn">View</button>
-                          </a>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`badge ${AI_STATUS_BADGE[aiStatus] || 'badge-warning'}`}>
-                          {aiStatus}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight:700, color:'#2196F3' }}>{r.ai_grade ?? '-'}</td>
-                      <td>
-                        {aiStatus === 'graded' ? (
-                          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                            <button className="btn btn-info btn-sm" onClick={() => handleViewReport(r.portfolio_id)} disabled={reportLoading}>
-                              View Report
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleDownloadReportPdf(r.portfolio_id)}
-                              disabled={pdfDownloading === r.portfolio_id}
-                            >
-                              {pdfDownloading === r.portfolio_id ? 'Downloading...' : 'Download PDF'}
+                    <Fragment key={r.portfolio_id}>
+                      <tr>
+                        <td>{r.student_no}</td>
+                        <td>{r.upload_date ? new Date(r.upload_date).toLocaleDateString() : '-'}</td>
+                        <td>
+                          {r.portfolio_link && (
+                            <a href={r.portfolio_link} target="_blank" rel="noreferrer">
+                              <button className="icon-btn">View</button>
+                            </a>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`badge ${AI_STATUS_BADGE[aiStatus] || 'badge-warning'}`}>
+                            {aiStatus}
+                          </span>
+                        </td>
+                        <td className="grading-score-cell">{r.ai_grade ?? '-'}</td>
+                        <td>
+                          {aiStatus === 'graded' ? (
+                            <div className="grading-button-group">
+                              <button
+                                className="btn btn-info btn-sm"
+                                onClick={() => handleViewReport(r.portfolio_id)}
+                              >
+                                {isReportOpen ? 'Hide Report' : 'View Report'}
+                              </button>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleDownloadReportPdf(r.portfolio_id)}
+                                disabled={pdfDownloading === r.portfolio_id}
+                              >
+                                {pdfDownloading === r.portfolio_id ? 'Downloading...' : 'Download PDF'}
+                              </button>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="grading-error-cell">
+                          {r.ai_grading_error || '-'}
+                        </td>
+                        <td>
+                          <input
+                            type="number" min="0" max="100"
+                            className="form-input grading-score-input"
+                            value={finalScores[r.portfolio_id] ?? ''}
+                            onChange={e => setFinalScores(s => ({ ...s, [r.portfolio_id]: e.target.value }))}
+                          />
+                        </td>
+                        <td>
+                          <span className={`badge ${r.status === 'PUBLISHED' ? 'badge-success' : 'badge-warning'}`}>
+                            {r.status || 'DRAFT'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="grading-action-group">
+                            {canRerun && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleGradeOne(r.portfolio_id)}>
+                                Run AI
+                              </button>
+                            )}
+                            {aiStatus === 'graded' && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleGradeOne(r.portfolio_id, true)}>
+                                Force AI
+                              </button>
+                            )}
+                            <button className="btn btn-success btn-sm" onClick={() => handleSetFinal(r.portfolio_id)}>
+                              Save
                             </button>
                           </div>
-                        ) : '-'}
-                      </td>
-                      <td style={{ maxWidth:220, fontSize:12, color:'#b00020' }}>
-                        {r.ai_grading_error || '-'}
-                      </td>
-                      <td>
-                        <input
-                          type="number" min="0" max="100"
-                          className="form-input" style={{ width:90 }}
-                          value={finalScores[r.portfolio_id] ?? ''}
-                          onChange={e => setFinalScores(s => ({ ...s, [r.portfolio_id]: e.target.value }))}
-                        />
-                      </td>
-                      <td>
-                        <span className={`badge ${r.status === 'PUBLISHED' ? 'badge-success' : 'badge-warning'}`}>
-                          {r.status || 'DRAFT'}
-                        </span>
-                      </td>
-                      <td style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                        {canRerun && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleGradeOne(r.portfolio_id)}>
-                            Run AI
-                          </button>
-                        )}
-                        {aiStatus === 'graded' && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleGradeOne(r.portfolio_id, true)}>
-                            Force AI
-                          </button>
-                        )}
-                        <button className="btn btn-success btn-sm" onClick={() => handleSetFinal(r.portfolio_id)}>
-                          Save
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {isReportOpen && (
+                        <tr className="grading-report-row">
+                          <td colSpan={TABLE_COLUMN_COUNT} className="grading-report-cell">
+                            <div className="grading-report-panel">
+                              <div className="grading-report-title">AI Assignment Evaluation Report</div>
+                              {isReportLoading ? (
+                                <div className="grading-report-state">Loading report...</div>
+                              ) : rowReportError ? (
+                                <div className="alert alert-error grading-inline-alert">{rowReportError}</div>
+                              ) : rowReport ? (
+                                <>
+                                  <div className="grading-report-meta">
+                                    <span>Student Number: <strong>{rowReport.student_no}</strong></span>
+                                    <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span>
+                                    <span>Model: <strong>{rowReport.ai_model || '-'}</strong></span>
+                                  </div>
+                                  <pre className="grading-report-text">{rowReport.ai_report_text}</pre>
+                                </>
+                              ) : (
+                                <div className="grading-report-state">No report content available.</div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {report && (
-          <div className="section-container" style={{ marginTop:24 }}>
-            <div className="section-header">AI Assignment Evaluation Report</div>
-            <div className="section-content">
-              <div style={{ fontSize:13, color:'#555', marginBottom:12 }}>
-                Student: <strong>{report.student_no}</strong> | AI Score: <strong>{report.ai_grade ?? '-'}</strong> | Model: <strong>{report.ai_model || '-'}</strong>
-              </div>
-              <pre style={{ whiteSpace:'pre-wrap', fontFamily:'inherit', lineHeight:1.7, color:'#333' }}>
-                {report.ai_report_text}
-              </pre>
-            </div>
           </div>
         )}
 
