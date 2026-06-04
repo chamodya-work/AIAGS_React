@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS ai_grading (
   ai_grading_error TEXT NULL,
   ai_grading_technical_error LONGTEXT NULL,
   ai_model VARCHAR(100) NULL,
-  grading_started_at TIMESTAMP NULL,
-  graded_at TIMESTAMP NULL,
+  grading_started_at TIMESTAMP NULL DEFAULT NULL,
+  graded_at TIMESTAMP NULL DEFAULT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_ai_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE
 );

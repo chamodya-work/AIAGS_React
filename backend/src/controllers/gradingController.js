@@ -35,6 +35,23 @@ function safeMessage(error) {
   return String(error?.message || error || 'Unknown grading error');
 }
 
+function isDatabaseError(error) {
+  return Boolean(error?.sql || error?.sqlMessage || error?.sqlState || error?.errno);
+}
+
+function publicBackendError(message) {
+  const error = new Error(message);
+  error.publicMessage = message;
+  return error;
+}
+
+function sendControllerError(res, fallback, error) {
+  const message = error?.publicMessage || fallback;
+  const body = { error: message };
+  if (!error?.publicMessage) body.details = safeMessage(error);
+  res.status(500).json(body);
+}
+
 function validateAiResult(result) {
   if (result?.status === 'failed') {
     throw new Error(result.error || 'AI grading failed');
@@ -79,14 +96,15 @@ async function markProcessing(portfolioId, rubricId) {
     `INSERT INTO ai_grading
       (portfolio_id, rubric_id, ai_status, ai_grade, ai_review_report, ai_report_text,
        ai_report_pdf_path, ai_grading_error, ai_grading_technical_error, grading_started_at, graded_at)
-     VALUES (?, ?, 'processing', NULL, NULL, NULL, NULL, NULL, NULL, CURRENT_TIMESTAMP, NULL)
+     VALUES (?, ?, 'processing', NULL, NULL, NULL, NULL, NULL, NULL, NOW(), NULL)
      ON DUPLICATE KEY UPDATE
        rubric_id=VALUES(rubric_id),
        ai_status='processing',
        ai_report_pdf_path=NULL,
        ai_grading_error=NULL,
        ai_grading_technical_error=NULL,
-       grading_started_at=CURRENT_TIMESTAMP`,
+       grading_started_at=NOW(),
+       graded_at=NULL`,
     [portfolioId, rubricId || null]
   );
 }
@@ -95,13 +113,14 @@ async function markFailed(portfolioId, rubricId, error, technicalError = null) {
   const message = safeMessage(error);
   await query(
     `INSERT INTO ai_grading
-      (portfolio_id, rubric_id, ai_status, ai_grading_error, ai_grading_technical_error)
-     VALUES (?, ?, 'failed', ?, ?)
+      (portfolio_id, rubric_id, ai_status, ai_grading_error, ai_grading_technical_error, graded_at)
+     VALUES (?, ?, 'failed', ?, ?, NULL)
      ON DUPLICATE KEY UPDATE
        rubric_id=VALUES(rubric_id),
        ai_status='failed',
        ai_grading_error=VALUES(ai_grading_error),
-       ai_grading_technical_error=VALUES(ai_grading_technical_error)`,
+       ai_grading_technical_error=VALUES(ai_grading_technical_error),
+       graded_at=NULL`,
     [portfolioId, rubricId || null, message, technicalError || message]
   );
   return message;
@@ -114,7 +133,7 @@ async function markGraded(portfolioId, rubricId, result) {
     `INSERT INTO ai_grading
       (portfolio_id, rubric_id, ai_grade, ai_review_report, ai_status, ai_report_text,
        ai_report_pdf_path, ai_grading_error, ai_grading_technical_error, ai_model, graded_at)
-     VALUES (?, ?, ?, ?, 'graded', ?, NULL, NULL, NULL, ?, CURRENT_TIMESTAMP)
+     VALUES (?, ?, ?, ?, 'graded', ?, NULL, NULL, NULL, ?, NOW())
      ON DUPLICATE KEY UPDATE
        rubric_id=VALUES(rubric_id),
        ai_grade=VALUES(ai_grade),
@@ -125,7 +144,7 @@ async function markGraded(portfolioId, rubricId, result) {
        ai_grading_error=NULL,
        ai_grading_technical_error=NULL,
        ai_model=VALUES(ai_model),
-       graded_at=CURRENT_TIMESTAMP`,
+       graded_at=NOW()`,
     [
       portfolioId,
       rubricId || null,
@@ -244,8 +263,21 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
     await markGraded(portfolioId, rubric.rubric_id, mlResult);
     return { portfolio_id: portfolioId, ok: true, status: 'graded' };
   } catch (e) {
-    const error = await markFailed(portfolioId, rubric?.rubric_id || null, e);
-    return { portfolio_id: portfolioId, ok: false, status: 'failed', error };
+    if (isDatabaseError(e)) {
+      console.error('AI grading database write failed:', safeMessage(e));
+      throw publicBackendError('Could not save AI grading status. Please run database migrations and try again.');
+    }
+
+    try {
+      const error = await markFailed(portfolioId, rubric?.rubric_id || null, e);
+      return { portfolio_id: portfolioId, ok: false, status: 'failed', error };
+    } catch (saveError) {
+      if (isDatabaseError(saveError)) {
+        console.error('Could not save AI grading failure status:', safeMessage(saveError));
+        throw publicBackendError('AI grading failed, but the failure status could not be saved. Please run database migrations and try again.');
+      }
+      throw saveError;
+    }
   }
 }
 
@@ -261,7 +293,7 @@ export async function gradeOne(req, res) {
   } catch (e) {
     if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
     console.error(e);
-    res.status(500).json({ error: 'Grading failed', details: safeMessage(e) });
+    sendControllerError(res, 'Grading failed', e);
   }
 }
 
@@ -294,7 +326,7 @@ export async function gradeAssignment(req, res) {
   } catch (e) {
     if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
     console.error(e);
-    res.status(500).json({ error: 'Assignment grading failed', details: safeMessage(e) });
+    sendControllerError(res, 'Assignment grading failed', e);
   }
 }
 

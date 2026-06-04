@@ -10,15 +10,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const schemaPath = path.join(__dirname, 'schema.sql');
-const step2MigrationPath = path.join(__dirname, 'step2_dynamic_ai_grading_migration.sql');
+const migrationPaths = [
+  path.join(__dirname, 'step2_dynamic_ai_grading_migration.sql'),
+  path.join(__dirname, 'step2_fix_ai_grading_timestamps.sql'),
+];
 
 const schemaSql = await fs.readFile(schemaPath, 'utf8');
-let step2Sql = '';
+const migrationSql = [];
 
-try {
-  step2Sql = await fs.readFile(step2MigrationPath, 'utf8');
-} catch {
-  step2Sql = '';
+for (const migrationPath of migrationPaths) {
+  try {
+    migrationSql.push(await fs.readFile(migrationPath, 'utf8'));
+  } catch {
+    // Older checkouts may not have every migration file.
+  }
 }
 
 const conn = await mysql.createConnection({
@@ -30,8 +35,10 @@ const conn = await mysql.createConnection({
 });
 
 await conn.query(schemaSql);
-if (step2Sql.trim()) {
-  await conn.query(step2Sql);
+for (const sql of migrationSql) {
+  if (sql.trim()) {
+    await conn.query(sql);
+  }
 }
 await conn.end();
 
