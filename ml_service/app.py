@@ -3,19 +3,36 @@ import os
 import re
 import csv
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 import ollama
 
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
 app = FastAPI(title="AIAGS ML Service", version="2.0")
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name, str(default))
+    clean_value = raw_value.split("#", 1)[0].strip()
+    try:
+        return int(clean_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer value, got {raw_value!r}") from exc
+
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", os.getenv("AIAGS_OLLAMA_MODEL", "llama3.1:8b"))
-OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
-MAX_EXTRACTED_CHARS = int(os.getenv("MAX_EXTRACTED_CHARS", "30000"))
+
+print(f"Using Ollama model: {OLLAMA_MODEL}")
+
+OLLAMA_TIMEOUT_SECONDS = _env_int("OLLAMA_TIMEOUT_SECONDS", 120)
+MAX_EXTRACTED_CHARS = _env_int("MAX_EXTRACTED_CHARS", 30000)
 
 RUBRIC_EXTENSIONS = {".xlsx", ".xls", ".csv", ".pdf", ".docx"}
 SUBMISSION_EXTENSIONS = {".pdf", ".docx"}
