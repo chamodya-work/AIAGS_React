@@ -132,3 +132,60 @@ export async function getMyDashboard(req, res) {
     return res.status(500).json({ error: "Failed to load student dashboard" });
   }
 }
+
+export async function getMyResult(req, res) {
+  try {
+    const userId = req.user?.user_id;
+    const assignmentId = Number(req.params.assignmentId);
+
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    if (!Number.isInteger(assignmentId) || assignmentId <= 0) {
+      return res.status(400).json({ error: "Invalid assignment id" });
+    }
+
+    const student = (
+      await query(
+        `SELECT s.student_no, u.email
+         FROM students s
+         JOIN users u ON u.user_id = s.user_id
+         WHERE s.user_id = ?
+         LIMIT 1`,
+        [userId]
+      )
+    )[0];
+
+    if (!student) {
+      return res.status(404).json({ error: "Student profile not found for this account" });
+    }
+
+    const rows = await query(
+      `SELECT p.portfolio_id, p.student_no, p.upload_date,
+              a.assignment_id, a.assignment_name, a.course_name, a.batch,
+              fg.final_grade, fg.status
+       FROM portfolios p
+       JOIN assignments a ON a.assignment_id = p.assignment_id
+       JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
+       WHERE p.assignment_id = ?
+         AND p.student_no IN (?, ?)
+         AND fg.status = 'PUBLISHED'
+       ORDER BY p.upload_date DESC
+       LIMIT 1`,
+      [assignmentId, student.student_no, student.email]
+    );
+
+    if (!rows[0]) {
+      return res.json({ released: false, result: null });
+    }
+
+    return res.json({
+      released: true,
+      result: {
+        ...rows[0],
+        student_no: student.student_no,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to load student result" });
+  }
+}

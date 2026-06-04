@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { z } from "zod";
 import { query } from "../db.js";
+import { normalizeRole, roleLabel } from "../middleware/auth.js";
 
 dotenv.config();
 
@@ -13,7 +14,7 @@ const loginSchema = z.object({
 });
 
 const createUserSchema = z.object({
-  role: z.enum(["admin", "teacher", "student"]),
+  role: z.enum(["admin", "teacher", "lecturer", "student"]),
   email: z.string().email(),
   password: z.string().min(6),
   display_name: z.string().min(1).optional(),
@@ -25,10 +26,13 @@ const createUserSchema = z.object({
 });
 
 function signToken(user, extra = {}) {
+  const role = normalizeRole(user.role);
+
   return jwt.sign(
     {
       user_id: user.user_id,
-      role: user.role,
+      role,
+      role_label: roleLabel(role),
       email: user.email,
       display_name: user.display_name,
       ...extra,
@@ -39,7 +43,10 @@ function signToken(user, extra = {}) {
 }
 
 function getHomeRoute(role) {
-  return role === "student" ? "/home_student.html" : "/add_assignments.html";
+  const normalized = normalizeRole(role);
+  if (normalized === "student") return "/student/home";
+  if (normalized === "admin") return "/portfolio/list";
+  return "/grading";
 }
 
 /**
@@ -302,7 +309,8 @@ export async function login(req, res) {
         token,
         user: {
           user_id: user.user_id,
-          role: user.role,
+          role: normalizeRole(user.role),
+          role_label: roleLabel(user.role),
           email: user.email, // this will be fullEmail
           display_name: user.display_name,
           stdNo,
@@ -340,7 +348,8 @@ export async function login(req, res) {
       token,
       user: {
         user_id: user.user_id,
-        role: user.role,
+        role: normalizeRole(user.role),
+        role_label: roleLabel(user.role),
         email: user.email,
         display_name: user.display_name,
         student_no: localStudent?.student_no || null,
@@ -359,15 +368,16 @@ export async function login(req, res) {
 export async function createUser(req, res) {
   try {
     const data = createUserSchema.parse(req.body);
+    const role = normalizeRole(data.role);
 
     const hash = await bcrypt.hash(data.password, 10);
     const result = await query(
       "INSERT INTO users (role, email, password_hash, display_name) VALUES (?,?,?,?)",
-      [data.role, data.email, hash, data.display_name || null]
+      [role, data.email, hash, data.display_name || null]
     );
     const userId = result.insertId;
 
-    if (data.role === "student") {
+    if (role === "student") {
       if (!data.student_no)
         return res.status(400).json({ error: "student_no is required for students" });
 
@@ -383,7 +393,7 @@ export async function createUser(req, res) {
       );
     }
 
-    if (data.role === "teacher") {
+    if (role === "teacher") {
       if (!data.teacher_id)
         return res.status(400).json({ error: "teacher_id is required for teachers" });
 
@@ -393,7 +403,7 @@ export async function createUser(req, res) {
       );
     }
 
-    if (data.role === "admin") {
+    if (role === "admin") {
       await query(
         "INSERT INTO administrators (admin_id, user_id, admin_name, email, department) VALUES (?,?,?,?,?)",
         [`ADMIN-${userId}`, userId, data.display_name || null, data.email, data.department || null]

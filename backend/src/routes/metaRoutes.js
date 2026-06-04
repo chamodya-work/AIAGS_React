@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { query } from "../db.js";
 
 const router = Router();
 
 // GET /api/courses
-router.get("/courses", requireAuth, async (req, res) => {
+router.get("/courses", requireAuth, requireRole("admin", "teacher"), async (req, res) => {
     const rows = await query(
         "SELECT DISTINCT course_name FROM assignments ORDER BY course_name"
     );
@@ -13,7 +13,7 @@ router.get("/courses", requireAuth, async (req, res) => {
 });
 
 // GET /api/batches?course_name=MBBS
-router.get("/batches", requireAuth, async (req, res) => {
+router.get("/batches", requireAuth, requireRole("admin", "teacher"), async (req, res) => {
     const { course_name } = req.query;
 
     let sql = "SELECT DISTINCT batch FROM assignments WHERE 1=1";

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/api';
+import { useAuth } from '../components/AuthContext';
+import { normalizeRole } from '../utils/roles';
 
 const DEPTS  = ['Medicine', 'Surgery', 'Pediatrics', 'Obstetrics', 'Community Medicine'];
 const ATTACH = ['Attendance', 'Professionalism Index', 'Photos'];
@@ -16,6 +18,8 @@ function formatDate(value) {
 
 export default function AssignmentsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = normalizeRole(user?.role) === 'admin';
   const [courses, setCourses]  = useState([]);
   const [batches, setBatches]  = useState([]);
   const [list, setList]        = useState([]);
@@ -139,12 +143,12 @@ export default function AssignmentsPage() {
                   <th>Assignment</th>
                   <th>Due Date</th>
                   <th>Edit</th>
-                  <th>Delete</th>
+                  {isAdmin && <th>Delete</th>}
                 </tr>
               </thead>
               <tbody>
                 {list.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign:'center', color:'#999', padding:'32px' }}>No assignments yet.</td></tr>
+                  <tr><td colSpan={isAdmin ? 6 : 5} style={{ textAlign:'center', color:'#999', padding:'32px' }}>No assignments yet.</td></tr>
                 ) : list.map(a => (
                   <tr key={a.assignment_id}>
                     <td>{a.batch}</td>
@@ -154,9 +158,11 @@ export default function AssignmentsPage() {
                     <td>
                       <button className="icon-btn" title="Edit" onClick={() => navigate(`/assignments/edit/${a.assignment_id}`)}>📝</button>
                     </td>
-                    <td>
-                      <button className="icon-btn" title="Delete" onClick={() => handleDelete(a.assignment_id)}>🗑️</button>
-                    </td>
+                    {isAdmin && (
+                      <td>
+                        <button className="icon-btn" title="Delete" onClick={() => handleDelete(a.assignment_id)}>🗑️</button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

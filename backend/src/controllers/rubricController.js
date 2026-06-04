@@ -118,3 +118,29 @@ export async function deleteRubric(req, res) {
     res.status(500).json({ error: 'Server error' });
   }
 }
+
+export async function getRubricFile(req, res) {
+  try {
+    const rubricId = Number(req.params.rubricId);
+    if (!Number.isInteger(rubricId) || rubricId <= 0) {
+      return res.status(400).json({ error: 'Invalid rubric id' });
+    }
+
+    const rows = await query('SELECT * FROM rubrics WHERE rubric_id=?', [rubricId]);
+    const rubric = rows[0];
+    if (!rubric?.rubric_file_path) return res.status(404).json({ error: 'Rubric file not found' });
+
+    const relativePath = rubric.rubric_file_path.replace(/^\/+/, '').replace(/\//g, path.sep);
+    const absolutePath = path.join(process.cwd(), relativePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'Rubric file not found on disk' });
+    }
+
+    res.type(rubric.rubric_file_mime || 'application/octet-stream');
+    res.sendFile(absolutePath);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+}

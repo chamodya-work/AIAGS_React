@@ -28,6 +28,11 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Rubric files must not be publicly downloadable; use protected rubric API routes.
+app.use('/uploads/rubrics', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
 // Uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 

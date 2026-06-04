@@ -11,6 +11,25 @@ const assignmentSchema = z.object({
   remark: z.string().optional().nullable()
 });
 
+async function getStudentProfile(userId) {
+  return (
+    await query(
+      'SELECT student_no, batch, course_name, department FROM students WHERE user_id=? LIMIT 1',
+      [userId]
+    )
+  )[0];
+}
+
+function matchesStudentProfile(assignment, student) {
+  if (!student) return false;
+  if (student.batch && assignment.batch !== student.batch) return false;
+  if (student.course_name && assignment.course_name !== student.course_name) return false;
+  if (student.department && assignment.department && String(assignment.department).toLowerCase() !== String(student.department).toLowerCase()) {
+    return false;
+  }
+  return true;
+}
+
 
 
 export async function listAssignments(req, res) {
@@ -26,6 +45,18 @@ export async function listAssignments(req, res) {
 
     if (course_name) { sql += " AND course_name = ?"; params.push(course_name); }
     if (batch) { sql += " AND batch = ?"; params.push(batch); }
+
+    if (req.user?.role === 'student') {
+      const student = await getStudentProfile(req.user.user_id);
+      if (!student) return res.status(404).json({ error: 'Student profile not found' });
+
+      if (student.batch) { sql += " AND batch = ?"; params.push(student.batch); }
+      if (student.course_name) { sql += " AND course_name = ?"; params.push(student.course_name); }
+      if (student.department) {
+        sql += " AND (department IS NULL OR LOWER(department) = LOWER(?))";
+        params.push(student.department);
+      }
+    }
 
     sql += " ORDER BY deadline_date DESC, assignment_id DESC";
 
@@ -86,6 +117,14 @@ export async function getAssignment(req, res) {
     const assignmentId = Number(req.params.id);
     const rows = await query('SELECT * FROM assignments WHERE assignment_id=?', [assignmentId]);
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+
+    if (req.user?.role === 'student') {
+      const student = await getStudentProfile(req.user.user_id);
+      if (!matchesStudentProfile(rows[0], student)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     res.json({ assignment: rows[0] });
   } catch (e) {
     console.error(e);

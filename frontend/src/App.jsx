@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './components/AuthContext';
+import { AuthProvider, useAuth } from './components/AuthContext';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
+import { homeForRole } from './utils/roles';
 
 // Pages
 import Login            from './pages/Login';
@@ -15,37 +17,45 @@ import UploadAssignment from './pages/UploadAssignment';
 import UploadPortfolio  from './pages/UploadPortfolio';
 import ViewPortfolioList from './pages/ViewPortfolioList';
 import GetFeedback      from './pages/GetFeedback';
+import AccessDenied     from './pages/AccessDenied';
+
+function HomeRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={homeForRole(user?.role)} replace />;
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public */}
           <Route path="/login" element={<Login />} />
 
-          {/* Protected – all behind Layout (sidebar + auth guard) */}
           <Route element={<Layout />}>
-            {/* Default redirect */}
-            <Route index element={<Navigate to="/portfolio/list" replace />} />
+            <Route index element={<HomeRedirect />} />
+            <Route path="/access-denied" element={<AccessDenied />} />
 
-            {/* Admin / Teacher routes */}
-            <Route path="/portfolio/list"   element={<ViewPortfolioList />} />
-            <Route path="/portfolio/upload" element={<UploadPortfolio />} />
-            <Route path="/assignments"      element={<Assignments />} />
-            <Route path="/assignments/edit/:id" element={<EditAssignment />} />
-            <Route path="/rubrics"          element={<Rubrics />} />
-            <Route path="/grading"          element={<Grading />} />
-            <Route path="/users"            element={<ManageUsers />} />
+            <Route element={<ProtectedRoute roles={['admin', 'teacher']} />}>
+              <Route path="/portfolio/list" element={<ViewPortfolioList />} />
+              <Route path="/assignments" element={<Assignments />} />
+              <Route path="/assignments/edit/:id" element={<EditAssignment />} />
+              <Route path="/rubrics" element={<Rubrics />} />
+              <Route path="/grading" element={<Grading />} />
+            </Route>
 
-            {/* Student routes */}
-            <Route path="/student/home"     element={<StudentHome />} />
-            <Route path="/student/upload"   element={<UploadAssignment />} />
-            <Route path="/student/feedback" element={<GetFeedback />} />
-            <Route path="/student/results"  element={<ViewResult />} />
+            <Route element={<ProtectedRoute roles={['admin']} />}>
+              <Route path="/portfolio/upload" element={<UploadPortfolio />} />
+              <Route path="/users" element={<ManageUsers />} />
+            </Route>
+
+            <Route element={<ProtectedRoute roles={['student']} />}>
+              <Route path="/student/home" element={<StudentHome />} />
+              <Route path="/student/upload" element={<UploadAssignment />} />
+              <Route path="/student/feedback" element={<GetFeedback />} />
+              <Route path="/student/results" element={<ViewResult />} />
+            </Route>
           </Route>
 
-          {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

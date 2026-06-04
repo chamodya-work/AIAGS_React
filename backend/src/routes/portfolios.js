@@ -24,9 +24,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
-router.get('/', requireAuth, listPortfolios);
-router.get('/:id', requireAuth, getPortfolio);
-router.post('/upload', requireAuth, requireRole('admin','teacher','student'), upload.single('file'), uploadPortfolio);
-router.delete('/:id', requireAuth, requireRole('admin','teacher'), deletePortfolio);
+router.get('/', requireAuth, requireRole('admin','teacher'), listPortfolios);
+router.get('/:id', requireAuth, requireRole('admin','teacher'), getPortfolio);
+router.post('/upload', requireAuth, requireRole('admin','student'), upload.single('file'), uploadPortfolio);
+router.delete('/:id', requireAuth, requireRole('admin'), deletePortfolio);
 
 export default router;

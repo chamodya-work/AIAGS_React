@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { normalizeRole, roleLabel } from '../utils/roles';
 
 const ADMIN_LINKS = [
   { to: '/portfolio/list',   label: 'View Portfolio List' },
@@ -8,6 +9,13 @@ const ADMIN_LINKS = [
   { to: '/rubrics',          label: 'Add Rubrics' },
   { to: '/grading',          label: 'Grading' },
   { to: '/users',            label: 'Manage Users' },
+];
+
+const LECTURER_LINKS = [
+  { to: '/portfolio/list',   label: 'View Portfolio List' },
+  { to: '/assignments',      label: 'Create Assignments' },
+  { to: '/rubrics',          label: 'Add Rubrics' },
+  { to: '/grading',          label: 'Grading' },
 ];
 
 const STUDENT_LINKS = [
@@ -21,10 +29,15 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const isStudent = user?.role === 'student';
-  const links = isStudent ? STUDENT_LINKS : ADMIN_LINKS;
-  // display_name comes from JWT payload (backend signToken includes display_name)
+  const role = normalizeRole(user?.role);
+  const links = role === 'student'
+    ? STUDENT_LINKS
+    : role === 'admin'
+      ? ADMIN_LINKS
+      : LECTURER_LINKS;
+
   const displayName = user?.display_name || user?.email || 'User';
+  const displayRole = user?.role_label || roleLabel(role);
 
   const handleSignOut = () => {
     logout();
@@ -43,7 +56,7 @@ export default function Sidebar() {
         </div>
         <div className="welcome-bar">
           Welcome, {displayName}
-          {user?.role && <span style={{ opacity:0.7, fontSize:11, marginLeft:8 }}>({user.role})</span>}
+          {role && <span style={{ opacity:0.7, fontSize:11, marginLeft:8 }}>({displayRole})</span>}
         </div>
       </div>
 
@@ -63,12 +76,12 @@ export default function Sidebar() {
       <div className="sidebar-footer">
         <button className="sign-out-button" onClick={handleSignOut}>
           <span>Sign Out</span>
-          <span>▶</span>
+          <span>&gt;</span>
         </button>
       </div>
 
       <div className="sidebar-copyright">
-        © 2025 Faculty of Medicine<br />
+        (c) 2025 Faculty of Medicine<br />
         University of Kelaniya, Sri Lanka.<br />
         All rights reserved.
       </div>

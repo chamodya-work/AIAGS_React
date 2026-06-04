@@ -73,6 +73,15 @@ export default function RubricsPage() {
     } catch (err) { setError(err.message); }
   };
 
+  const handleViewRubric = async (rId) => {
+    try {
+      setError('');
+      await api.rubrics.openFile(rId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <>
       <h1 className="page-title">Add Rubric</h1>
@@ -133,9 +142,7 @@ export default function RubricsPage() {
                     <td>{r.create_date ? new Date(r.create_date).toLocaleDateString() : '—'}</td>
                     <td>
                       {r.rubric_file_path && (
-                        <a href={r.rubric_file_path} target="_blank" rel="noreferrer">
-                          <button className="icon-btn" title="View">🔍</button>
-                        </a>
+                        <button className="icon-btn" title="View" onClick={() => handleViewRubric(r.rubric_id)}>🔍</button>
                       )}
                     </td>
                     <td>

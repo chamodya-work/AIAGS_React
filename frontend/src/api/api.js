@@ -24,6 +24,28 @@ async function request(path, opts = {}) {
   return data;
 }
 
+async function openAuthorizedFile(path) {
+  const token = localStorage.getItem('aigs_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(BASE + path, { headers });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      const data = await res.json();
+      message = data?.error || data?.message || message;
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export const api = {
   auth: {
     // POST /api/auth/login
@@ -68,6 +90,7 @@ export const api = {
       fd.append('file', file);
       return request('/api/rubrics/upload', { method: 'POST', body: fd });
     },
+    openFile: (rubricId) => openAuthorizedFile(`/api/rubrics/${rubricId}/file`),
     update: (rubricId, payload) => request(`/api/rubrics/${rubricId}`, { method: 'PUT', body: JSON.stringify(payload) }),
     remove: (rubricId) => request(`/api/rubrics/${rubricId}`, { method: 'DELETE' }),
   },
@@ -111,6 +134,7 @@ export const api = {
   // /api/student
   student: {
     dashboard: () => request('/api/student/dashboard'),
+    result: (assignmentId) => request(`/api/student/results/${assignmentId}`),
   },
 
   // /api/auth/users  (admin only)
