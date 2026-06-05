@@ -10,6 +10,7 @@ import rubricRoutes from './routes/rubrics.js';
 import portfolioRoutes from './routes/portfolios.js';
 import gradingRoutes from './routes/grading.js';
 import lecturerAssignmentRoutes from './routes/lecturerAssignments.js';
+import manualGradingRoutes from './routes/manualGrading.js';
 import metaRoutes from "./routes/metaRoutes.js";
 import studentRoutes from "./routes/students.js";
 
@@ -61,6 +62,7 @@ app.use('/api/rubrics', rubricRoutes);
 app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/grading', gradingRoutes);
 app.use('/api/lecturer-assignments', lecturerAssignmentRoutes);
+app.use('/api/manual-grading', manualGradingRoutes);
 app.use('/api/student', studentRoutes);
 
 // Serve React frontend (production build)

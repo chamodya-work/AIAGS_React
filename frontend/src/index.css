@@ -991,6 +991,53 @@ html, body, #root {
   color: #444;
   line-height: 1.7;
 }
+
+/* Manual grading */
+.manual-grading-card {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.manual-grading-table {
+  min-width: 1180px;
+}
+.manual-score-input {
+  min-width: 88px;
+  max-width: 100px;
+}
+.manual-score-warning {
+  border-color: #f39c12;
+  background: #fff8e1;
+}
+.manual-warning-text {
+  color: #9a5a00;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+.manual-remark-input {
+  min-width: 220px;
+  min-height: 58px;
+  border-color: #f1c40f;
+  background: #fffef5;
+  resize: vertical;
+}
+.result-remark-panel {
+  border: 1px solid #d7e3ef;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 16px;
+}
+.result-remark-panel strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-dark);
+}
+.result-remark-panel p {
+  margin: 0;
+  color: #444;
+  line-height: 1.6;
+}
 @media (max-width: 720px) {
   .student-summary-stats {
     margin-left: 0;

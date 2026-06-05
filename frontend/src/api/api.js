@@ -190,6 +190,20 @@ export const api = {
       }),
   },
 
+  manualGrading: {
+    resultsByAssignment: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/results`),
+    save: (portfolioId, payload) =>
+      request(`/api/manual-grading/portfolio/${portfolioId}/save`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    submitToHead: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/submit-to-head`, { method: 'POST' }),
+    publishToStudents: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/publish-to-students`, { method: 'POST' }),
+  },
+
   // /api/student
   student: {
     dashboard: () => request('/api/student/dashboard'),

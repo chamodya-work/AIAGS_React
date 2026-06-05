@@ -218,13 +218,13 @@ export async function getMyResult(req, res) {
     const rows = await query(
       `SELECT p.portfolio_id, p.student_no, p.upload_date,
               a.assignment_id, a.assignment_name, a.course_name, a.batch,
-              fg.final_grade, fg.status
+              fg.final_grade, fg.manual_remark, fg.publish_status
        FROM portfolios p
        JOIN assignments a ON a.assignment_id = p.assignment_id
        JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
        WHERE p.assignment_id = ?
          AND p.student_no IN (?, ?)
-         AND fg.status = 'PUBLISHED'
+         AND fg.publish_status = 'published_to_student'
        ORDER BY p.upload_date DESC
        LIMIT 1`,
       [assignmentId, student.student_no, student.email]
@@ -237,8 +237,15 @@ export async function getMyResult(req, res) {
     return res.json({
       released: true,
       result: {
-        ...rows[0],
+        portfolio_id: rows[0].portfolio_id,
+        assignment_id: rows[0].assignment_id,
+        assignment_name: rows[0].assignment_name,
+        course_name: rows[0].course_name,
+        batch: rows[0].batch,
+        upload_date: rows[0].upload_date,
+        final_grade: rows[0].final_grade,
         student_no: student.student_no,
+        remark: rows[0].manual_remark || null,
       },
     });
   } catch (e) {

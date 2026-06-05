@@ -100,6 +100,13 @@ export default function ViewResult() {
               </div>
             </div>
 
+            {result.remark && (
+              <div className="result-remark-panel">
+                <strong>Remark</strong>
+                <p>{result.remark}</p>
+              </div>
+            )}
+
             <div style={{ textAlign:'center', marginTop:24 }}>
               <button className="btn btn-secondary" onClick={() => window.print()}>Print Result</button>
             </div>

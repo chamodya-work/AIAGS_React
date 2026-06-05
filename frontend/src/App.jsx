@@ -11,6 +11,7 @@ import Assignments      from './pages/Assignments';
 import EditAssignment   from './pages/EditAssignment';
 import Rubrics          from './pages/Rubrics';
 import Grading          from './pages/Grading';
+import ManualGrading    from './pages/ManualGrading';
 import ManageUsers      from './pages/ManageUsers';
 import AssignLecturers  from './pages/AssignLecturers';
 import ViewResult       from './pages/ViewResult';
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/assignments/edit/:id" element={<EditAssignment />} />
               <Route path="/rubrics" element={<Rubrics />} />
               <Route path="/grading" element={<Grading />} />
+              <Route path="/manual-grading" element={<ManualGrading />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['admin']} />}>

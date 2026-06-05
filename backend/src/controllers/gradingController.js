@@ -497,13 +497,61 @@ export async function setFinalGrade(req, res) {
     const portfolioId = Number(req.params.id);
     if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
     const data = finalSchema.parse(req.body);
+    if (data.status === 'PUBLISHED' && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admin/head can publish grades to students' });
+    }
 
     const p = (await query('SELECT portfolio_id, student_no FROM portfolios WHERE portfolio_id=?', [portfolioId]))[0];
     if (!p) return res.status(404).json({ error: 'Portfolio not found' });
 
+    const existing = (
+      await query(
+        `SELECT status, publish_status, published_by, published_at
+         FROM final_grading
+         WHERE portfolio_id=? AND student_no=?
+         LIMIT 1`,
+        [portfolioId, p.student_no]
+      )
+    )[0];
+    const alreadyPublished = existing?.publish_status === 'published_to_student' || existing?.status === 'PUBLISHED';
+    if (alreadyPublished && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Published grades can only be changed by admin/head' });
+    }
+
+    const shouldPublish = data.status === 'PUBLISHED' || alreadyPublished;
+    const publishStatus = shouldPublish ? 'published_to_student' : 'draft';
+    const legacyStatus = shouldPublish ? 'PUBLISHED' : 'DRAFT';
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const publishedBy = data.status === 'PUBLISHED' ? req.user.user_id : (shouldPublish ? existing?.published_by || req.user.user_id : null);
+    const publishedAt = data.status === 'PUBLISHED' ? now : (shouldPublish ? existing?.published_at || now : null);
+
     await query(
-      'INSERT INTO final_grading (student_no, portfolio_id, status, final_grade) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status), final_grade=VALUES(final_grade)',
-      [p.student_no, portfolioId, data.status || 'DRAFT', data.final_grade]
+      `INSERT INTO final_grading
+        (student_no, portfolio_id, status, final_grade, manual_score,
+         saved_by, saved_by_role, saved_at, publish_status, published_by, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         status=VALUES(status),
+         final_grade=VALUES(final_grade),
+         manual_score=VALUES(manual_score),
+         saved_by=VALUES(saved_by),
+         saved_by_role=VALUES(saved_by_role),
+         saved_at=NOW(),
+         publish_status=VALUES(publish_status),
+         published_by=VALUES(published_by),
+         published_at=VALUES(published_at)`,
+      [
+        p.student_no,
+        portfolioId,
+        legacyStatus,
+        data.final_grade,
+        data.final_grade,
+        req.user.user_id,
+        req.user.role,
+        publishStatus,
+        publishedBy,
+        publishedAt,
+      ]
     );
 
     const out = (await query('SELECT * FROM final_grading WHERE student_no=? AND portfolio_id=?', [p.student_no, portfolioId]))[0];
@@ -561,10 +609,14 @@ export async function publishAssignmentGrades(req, res) {
     `
     UPDATE final_grading fg
     JOIN portfolios p ON p.portfolio_id = fg.portfolio_id
-    SET fg.status='PUBLISHED'
+    SET fg.status='PUBLISHED',
+        fg.publish_status='published_to_student',
+        fg.published_by=?,
+        fg.published_at=NOW()
     WHERE p.assignment_id=?
+      AND fg.final_grade IS NOT NULL
     `,
-    [assignmentId]
+    [req.user.user_id, assignmentId]
   );
   res.json({ ok: true });
 }

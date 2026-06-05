@@ -8,7 +8,8 @@ const ADMIN_LINKS = [
   { to: '/assignments',      label: 'Create Assignments' },
   { to: '/assign-lecturers', label: 'Assign Lecturers' },
   { to: '/rubrics',          label: 'Add Rubrics' },
-  { to: '/grading',          label: 'Grading' },
+  { to: '/grading',          label: 'AI Grading' },
+  { to: '/manual-grading',   label: 'Manual Grading' },
   { to: '/users',            label: 'Manage Users' },
 ];
 
@@ -16,7 +17,8 @@ const LECTURER_LINKS = [
   { to: '/portfolio/list',   label: 'View Portfolio List' },
   { to: '/assignments',      label: 'Create Assignments' },
   { to: '/rubrics',          label: 'Add Rubrics' },
-  { to: '/grading',          label: 'Grading' },
+  { to: '/grading',          label: 'AI Grading' },
+  { to: '/manual-grading',   label: 'Manual Grading' },
 ];
 
 const STUDENT_LINKS = [
