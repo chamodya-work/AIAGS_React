@@ -6,17 +6,17 @@ const ADMIN_LINKS = [
   { to: '/portfolio/list',   label: 'View Portfolio List' },
   { to: '/portfolio/upload', label: 'Upload Portfolio' },
   { to: '/assignments',      label: 'Create Assignments' },
-  { to: '/assign-lecturers', label: 'Assign Lecturers' },
-  { to: '/rubrics',          label: 'Add Rubrics' },
+  { to: '/rubrics',          label: 'Rubrics' },
   { to: '/grading',          label: 'AI Grading' },
   { to: '/manual-grading',   label: 'Manual Grading' },
+  { to: '/assign-lecturers', label: 'Assign Lecturers' },
   { to: '/users',            label: 'Manage Users' },
 ];
 
 const LECTURER_LINKS = [
   { to: '/portfolio/list',   label: 'View Portfolio List' },
   { to: '/assignments',      label: 'Create Assignments' },
-  { to: '/rubrics',          label: 'Add Rubrics' },
+  { to: '/rubrics',          label: 'Rubrics' },
   { to: '/grading',          label: 'AI Grading' },
   { to: '/manual-grading',   label: 'Manual Grading' },
 ];

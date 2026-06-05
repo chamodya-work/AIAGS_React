@@ -240,7 +240,7 @@ function matchesStudentProfile(assignment, student) {
 
 export async function listAssignments(req, res) {
   try {
-    const { course_name, batch } = req.query;
+    const { course_name, batch, department } = req.query;
 
     let sql = `
       SELECT assignment_id, assignment_name, batch, course_name, department,
@@ -253,6 +253,7 @@ export async function listAssignments(req, res) {
     const params = [];
 
     if (course_name) { sql += ' AND course_name = ?'; params.push(course_name); }
+    if (department) { sql += ' AND LOWER(department) = LOWER(?)'; params.push(department); }
     if (batch) { sql += ' AND batch = ?'; params.push(batch); }
 
     if (req.user?.role === 'student') {

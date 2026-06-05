@@ -1,82 +1,149 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
+import { useAuth } from '../components/AuthContext';
+import { normalizeRole } from '../utils/roles';
+
+function uniqueValues(rows, key) {
+  return [...new Set(rows.map(row => row?.[key]).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+}
+
+function uniqueAssignments(rows) {
+  const byId = new Map();
+  rows.forEach(row => {
+    if (row?.assignment_id && !byId.has(row.assignment_id)) {
+      byId.set(row.assignment_id, row);
+    }
+  });
+  return [...byId.values()].sort((a, b) => (
+    String(a.assignment_name || '').localeCompare(String(b.assignment_name || ''), undefined, { numeric: true })
+  ));
+}
+
+function formatDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString();
+}
+
+function cleanParams(params) {
+  return Object.fromEntries(Object.entries(params).filter(([, value]) => value));
+}
 
 export default function RubricsPage() {
-  const [courses, setCourses]         = useState([]);
-  const [batches, setBatches]         = useState([]);
+  const { user } = useAuth();
+  const isAdmin = normalizeRole(user?.role) === 'admin';
   const [assignments, setAssignments] = useState([]);
-  const [rubrics, setRubrics]         = useState([]);
-  const [selCourse, setSelCourse]     = useState('');
-  const [selBatch, setSelBatch]       = useState('');
-  const [selAssignment, setSelAssignment] = useState('');
-  const [loading, setLoading]         = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [error, setError]             = useState('');
-  const [success, setSuccess]         = useState('');
-  const fileRef = useRef();
+  const [rubrics, setRubrics] = useState([]);
+  const [filters, setFilters] = useState({
+    course_name: '',
+    department: '',
+    batch: '',
+    assignment_id: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const courseOptions = useMemo(() => uniqueValues(assignments, 'course_name'), [assignments]);
+
+  const departmentOptions = useMemo(() => (
+    uniqueValues(
+      assignments.filter(row => !filters.course_name || row.course_name === filters.course_name),
+      'department'
+    )
+  ), [assignments, filters.course_name]);
+
+  const batchOptions = useMemo(() => (
+    uniqueValues(
+      assignments.filter(row => (
+        (!filters.course_name || row.course_name === filters.course_name) &&
+        (!filters.department || String(row.department || '').toLowerCase() === filters.department.toLowerCase())
+      )),
+      'batch'
+    )
+  ), [assignments, filters.course_name, filters.department]);
+
+  const assignmentOptions = useMemo(() => (
+    uniqueAssignments(assignments.filter(row => (
+      (!filters.course_name || row.course_name === filters.course_name) &&
+      (!filters.department || String(row.department || '').toLowerCase() === filters.department.toLowerCase()) &&
+      (!filters.batch || row.batch === filters.batch)
+    )))
+  ), [assignments, filters.course_name, filters.department, filters.batch]);
+
+  const loadRubrics = async (nextFilters = filters) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.rubrics.list(cleanParams(nextFilters));
+      setRubrics(data.rubrics || []);
+    } catch (err) {
+      setRubrics([]);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    api.courses.list()
-      .then(d => setCourses(d.courses || []))
-      .catch(err => setError(err.message));
-  }, []);
+    let ignore = false;
 
-  const onCourseChange = async (cn) => {
-    setSelCourse(cn); setSelBatch(''); setSelAssignment(''); setRubrics([]);
-    if (cn) {
-      try { const d = await api.batches.list({ course_name: cn }); setBatches(d.batches || []); }
-      catch { setBatches([]); }
-    }
+    Promise.all([api.assignments.list(), api.rubrics.list()])
+      .then(([assignmentData, rubricData]) => {
+        if (ignore) return;
+        const nextRubrics = rubricData.rubrics || [];
+        setRubrics(nextRubrics);
+        setAssignments(isAdmin
+          ? (assignmentData.assignments || [])
+          : nextRubrics.map(rubric => ({
+              assignment_id: rubric.assignment_id,
+              assignment_name: rubric.assignment_name,
+              course_name: rubric.course_name,
+              department: rubric.department,
+              batch: rubric.batch,
+            }))
+        );
+      })
+      .catch(err => {
+        if (!ignore) setError(err.message);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => { ignore = true; };
+  }, [isAdmin]);
+
+  const updateFilter = (patch) => {
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    loadRubrics(next);
   };
 
-  const onBatchChange = async (batch) => {
-    setSelBatch(batch); setSelAssignment(''); setRubrics([]);
-    if (batch && selCourse) {
-      try {
-        const d = await api.assignments.list({ course_name: selCourse, batch });
-        setAssignments(d.assignments || []);
-      } catch { setAssignments([]); }
-    }
+  const clearFilters = () => {
+    const next = { course_name: '', department: '', batch: '', assignment_id: '' };
+    setFilters(next);
+    loadRubrics(next);
   };
 
-  const onAssignmentChange = async (aId) => {
-    setSelAssignment(aId); setRubrics([]);
-    if (aId) {
-      setLoading(true);
-      try { const d = await api.rubrics.byAssignment(aId); setRubrics(d.rubrics || []); }
-      catch { setRubrics([]); }
-      finally { setLoading(false); }
-    }
-  };
-
-  const handleUpload = async () => {
-    const file = fileRef.current?.files?.[0];
-    if (!selAssignment) { setError('Please select an assignment first.'); return; }
-    if (!file)          { setError('Please choose a file to upload.'); return; }
-    setError(''); setSaving(true);
+  const handleViewRubric = async (rubricId) => {
+    setError('');
     try {
-      await api.rubrics.upload({ assignment_id: selAssignment, rubric_name: file.name, file });
-      const d = await api.rubrics.byAssignment(selAssignment);
-      setRubrics(d.rubrics || []);
-      setSuccess('Rubric uploaded successfully!');
-      fileRef.current.value = '';
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
+      await api.rubrics.openFile(rubricId);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  const handleDelete = async (rId) => {
+  const handleDelete = async (rubricId) => {
     if (!window.confirm('Delete this rubric?')) return;
+    setError('');
     try {
-      await api.rubrics.remove(rId);
-      setRubrics(rubrics.filter(r => r.rubric_id !== rId));
-    } catch (err) { setError(err.message); }
-  };
-
-  const handleViewRubric = async (rId) => {
-    try {
-      setError('');
-      await api.rubrics.openFile(rId);
+      await api.rubrics.remove(rubricId);
+      setRubrics(prev => prev.filter(row => row.rubric_id !== rubricId));
+      setSuccess('Rubric deleted.');
+      setTimeout(() => setSuccess(''), 2500);
     } catch (err) {
       setError(err.message);
     }
@@ -84,37 +151,76 @@ export default function RubricsPage() {
 
   return (
     <>
-      <h1 className="page-title">Add Rubric</h1>
-      {error   && <div className="alert alert-error">{error}</div>}
+      <h1 className="page-title">Rubrics</h1>
+      {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
       <div className="content-card">
         <div className="form-row">
           <label className="form-label">Course:</label>
-          <select className="form-select" value={selCourse} onChange={e => onCourseChange(e.target.value)}>
-            <option value="">Select Course</option>
-            {courses.map(c => <option key={c} value={c}>{c}</option>)}
+          <select
+            className="form-select"
+            value={filters.course_name}
+            onChange={e => updateFilter({
+              course_name: e.target.value,
+              department: '',
+              batch: '',
+              assignment_id: '',
+            })}
+          >
+            <option value="">All Courses</option>
+            {courseOptions.map(course => <option key={course} value={course}>{course}</option>)}
           </select>
-          <label className="form-label">Batch:</label>
-          <select className="form-select" value={selBatch} onChange={e => onBatchChange(e.target.value)}>
-            <option value="">Select Batch</option>
-            {batches.map(b => <option key={b} value={b}>{b}</option>)}
+
+          <label className="form-label">Department:</label>
+          <select
+            className="form-select"
+            value={filters.department}
+            onChange={e => updateFilter({
+              department: e.target.value,
+              batch: '',
+              assignment_id: '',
+            })}
+          >
+            <option value="">All Departments</option>
+            {departmentOptions.map(department => (
+              <option key={department} value={department}>{department}</option>
+            ))}
           </select>
         </div>
 
         <div className="form-row">
+          <label className="form-label">Batch:</label>
+          <select
+            className="form-select"
+            value={filters.batch}
+            onChange={e => updateFilter({ batch: e.target.value, assignment_id: '' })}
+          >
+            <option value="">All Batches</option>
+            {batchOptions.map(batch => <option key={batch} value={batch}>{batch}</option>)}
+          </select>
+
           <label className="form-label">Assignment:</label>
-          <select className="form-select" value={selAssignment} onChange={e => onAssignmentChange(e.target.value)}>
-            <option value="">Select Assignment</option>
-            {assignments.map(a => <option key={a.assignment_id} value={a.assignment_id}>{a.assignment_name}</option>)}
+          <select
+            className="form-select"
+            value={filters.assignment_id}
+            onChange={e => updateFilter({ assignment_id: e.target.value })}
+          >
+            <option value="">All Assignments</option>
+            {assignmentOptions.map(assignment => (
+              <option key={assignment.assignment_id} value={assignment.assignment_id}>
+                {assignment.assignment_name}
+              </option>
+            ))}
           </select>
         </div>
 
-        <div className="form-row" style={{ alignItems:'center', flexWrap:'wrap', gap:12 }}>
-          <label className="form-label">Upload Rubric:</label>
-          <input type="file" ref={fileRef} accept=".xlsx,.xls,.csv,.pdf,.docx" style={{ flex:1, minWidth:180 }} />
-          <button className="btn btn-primary" onClick={handleUpload} disabled={saving}>
-            {saving ? 'Uploading…' : 'UPLOAD RUBRIC'}
+        <div className="form-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ color: '#6c757d', fontSize: 13 }}>
+            Rubrics uploaded during assignment creation appear here.
+          </div>
+          <button className="btn btn-secondary btn-sm" type="button" onClick={clearFilters}>
+            Clear Filters
           </button>
         </div>
 
@@ -122,31 +228,58 @@ export default function RubricsPage() {
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
           <div className="table-container">
-            <table className="data-table">
+            <table className="data-table" style={{ minWidth: 1100 }}>
               <thead>
                 <tr>
-                  <th>Rubric Name</th>
-                  <th>Created Date</th>
-                  <th>View</th>
-                  <th>Delete</th>
+                  <th>Rubric</th>
+                  <th>Assignment</th>
+                  <th>Course</th>
+                  <th>Department</th>
+                  <th>Batch</th>
+                  <th>File Type</th>
+                  <th>Uploaded Date</th>
+                  <th>View / Download</th>
+                  <th>Manage</th>
                 </tr>
               </thead>
               <tbody>
                 {rubrics.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign:'center', color:'#999', padding:'32px' }}>
-                    {selAssignment ? 'No rubrics for this assignment.' : 'Select an assignment to view rubrics.'}
-                  </td></tr>
-                ) : rubrics.map(r => (
-                  <tr key={r.rubric_id}>
-                    <td>{r.rubric_name}</td>
-                    <td>{r.create_date ? new Date(r.create_date).toLocaleDateString() : '—'}</td>
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
+                      No rubrics found.
+                    </td>
+                  </tr>
+                ) : rubrics.map(rubric => (
+                  <tr key={rubric.rubric_id}>
                     <td>
-                      {r.rubric_file_path && (
-                        <button className="icon-btn" title="View" onClick={() => handleViewRubric(r.rubric_id)}>🔍</button>
+                      <strong>{rubric.rubric_file_original_name || rubric.rubric_name || '-'}</strong>
+                      {rubric.rubric_name && rubric.rubric_file_original_name && rubric.rubric_name !== rubric.rubric_file_original_name && (
+                        <div style={{ fontSize: 12, color: '#6c757d' }}>{rubric.rubric_name}</div>
+                      )}
+                    </td>
+                    <td>{rubric.assignment_name || '-'}</td>
+                    <td>{rubric.course_name || '-'}</td>
+                    <td>{rubric.department || '-'}</td>
+                    <td>{rubric.batch || '-'}</td>
+                    <td>{rubric.file_type || '-'}</td>
+                    <td>{formatDate(rubric.create_date)}</td>
+                    <td>
+                      {rubric.has_file ? (
+                        <button className="btn btn-info btn-sm" onClick={() => handleViewRubric(rubric.rubric_id)}>
+                          View
+                        </button>
+                      ) : (
+                        <span style={{ color: '#6c757d' }}>No file</span>
                       )}
                     </td>
                     <td>
-                      <button className="icon-btn" title="Delete" onClick={() => handleDelete(r.rubric_id)}>🗑️</button>
+                      {rubric.can_delete ? (
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(rubric.rubric_id)}>
+                          Delete
+                        </button>
+                      ) : (
+                        <span style={{ color: '#6c757d' }}>Protected</span>
+                      )}
                     </td>
                   </tr>
                 ))}

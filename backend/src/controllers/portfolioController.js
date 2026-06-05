@@ -97,7 +97,8 @@ async function resolveUploadStudentNo(req, submittedStudentNo) {
 
 export async function uploadPortfolio(req, res) {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const uploadedFiles = req.files?.length ? req.files : (req.file ? [req.file] : []);
+    if (!uploadedFiles.length) return res.status(400).json({ error: 'No file uploaded' });
 
     const meta = createPortfolioSchema.parse(req.body);
     const studentNo = await resolveUploadStudentNo(req, meta.student_no);
@@ -108,12 +109,34 @@ export async function uploadPortfolio(req, res) {
       await query('INSERT INTO students (student_no) VALUES (?)', [studentNo]);
     }
 
-    const relativePath = path.posix.join('uploads', req.file.filename);
+    const fileRecords = uploadedFiles.map((file) => ({
+      file,
+      storedPath: `/${path.posix.join('uploads', file.filename)}`,
+    }));
 
     const result = await query(
       'INSERT INTO portfolios (student_no, assignment_id, portfolio_link) VALUES (?,?,?)',
-      [studentNo, meta.assignment_id, `/${relativePath}`]
+      [studentNo, meta.assignment_id, fileRecords[0].storedPath]
     );
+
+    for (const record of fileRecords) {
+      await query(
+        `INSERT INTO portfolio_files
+          (portfolio_id, assignment_id, student_no, required_document_id,
+           file_path, original_name, mime_type, file_size)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [
+          result.insertId,
+          meta.assignment_id,
+          studentNo,
+          null,
+          record.storedPath,
+          record.file.originalname || path.basename(record.storedPath),
+          record.file.mimetype || null,
+          record.file.size || null,
+        ]
+      );
+    }
 
     const rows = await query('SELECT * FROM portfolios WHERE portfolio_id=?', [result.insertId]);
     res.status(201).json({ portfolio: rows[0] });
@@ -160,6 +183,17 @@ export async function listPortfolios(req, res) {
              END, pf.uploaded_at DESC, pf.file_id DESC
              LIMIT 1
            ) AS primary_file_id,
+           (
+             SELECT pf.original_name
+             FROM portfolio_files pf
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+             ORDER BY CASE
+               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
+               ELSE 1
+             END, pf.uploaded_at DESC, pf.file_id DESC
+             LIMIT 1
+           ) AS primary_file_name,
            ag.ai_status, ag.ai_grade, ag.ai_grading_error,
            fg.final_grade, fg.manual_score, fg.manual_remark, fg.status, fg.publish_status,
            fg.saved_by, fg.saved_by_role,

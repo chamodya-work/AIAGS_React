@@ -96,6 +96,13 @@ export const api = {
       request(`/api/batches${course_name ? `?course_name=${encodeURIComponent(course_name)}` : ''}`),
   },
 
+  departments: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/api/departments${q ? `?${q}` : ''}`);
+    },
+  },
+
   // /api/assignments
   assignments: {
     list: (params = {}) => {
@@ -115,6 +122,10 @@ export const api = {
 
   // /api/rubrics
   rubrics: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/api/rubrics${q ? `?${q}` : ''}`);
+    },
     byAssignment: (assignmentId) => request(`/api/rubrics/assignment/${assignmentId}`),
     create: (payload) => request('/api/rubrics', { method: 'POST', body: JSON.stringify(payload) }),
     upload: ({ assignment_id, rubric_name, file }) => {
@@ -137,11 +148,12 @@ export const api = {
       return request(`/api/portfolios?${qs.toString()}`);
     },
     // Backend requires: student_no (string), assignment_id (number), file (multipart)
-    upload: ({ student_no, assignment_id, file }) => {
+    upload: ({ student_no, assignment_id, file, files }) => {
       const fd = new FormData();
       fd.append('student_no', student_no);
       fd.append('assignment_id', String(assignment_id));
-      fd.append('file', file);
+      const uploadFiles = files?.length ? files : (file ? [file] : []);
+      uploadFiles.forEach((item) => fd.append(uploadFiles.length > 1 ? 'files' : 'file', item));
       return request('/api/portfolios/upload', { method: 'POST', body: fd });
     },
     remove: (id) => request(`/api/portfolios/${id}`, { method: 'DELETE' }),

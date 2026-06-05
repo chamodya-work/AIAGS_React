@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { getRubricByAssignment, createRubric, uploadRubric, deleteRubric, getRubricFile } from '../controllers/rubricController.js';
+import { listRubrics, getRubricByAssignment, createRubric, uploadRubric, deleteRubric, getRubricFile } from '../controllers/rubricController.js';
 
 const router = Router();
 
@@ -45,6 +45,7 @@ function handleRubricUpload(req, res, next) {
 }
 
 // ===== Existing =====
+router.get('/', requireAuth, requireRole('admin', 'teacher'), listRubrics);
 router.get('/assignment/:assignmentId', requireAuth, requireRole('admin', 'teacher'), getRubricByAssignment);
 router.get('/:rubricId/file', requireAuth, requireRole('admin', 'teacher'), getRubricFile);
 router.post('/', requireAuth, requireRole('admin', 'teacher'), createRubric);

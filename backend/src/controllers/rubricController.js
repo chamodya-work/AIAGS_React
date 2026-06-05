@@ -14,15 +14,125 @@ const rubricUploadSchema = z.object({
   assignment_id: z.number().int(),
 });
 
+function canAccessRubricRow(req, rubric) {
+  if (req.user?.role === 'admin') return true;
+  if (req.user?.role !== 'teacher') return false;
+  return Number(rubric.created_by || 0) === Number(req.user.user_id || 0)
+    || Number(rubric.lecturer_assignment_access || 0) > 0;
+}
+
+function canDeleteRubricRow(req, rubric) {
+  if (req.user?.role === 'admin') return true;
+  if (req.user?.role !== 'teacher') return false;
+  return Number(rubric.created_by || 0) === Number(req.user.user_id || 0);
+}
+
+function safeRubric(row, req) {
+  const originalName = row.rubric_file_original_name || row.rubric_name || '';
+  const extension = path.extname(originalName).replace('.', '').toUpperCase();
+
+  return {
+    rubric_id: row.rubric_id,
+    rubric_name: row.rubric_name,
+    rubric_file_original_name: row.rubric_file_original_name,
+    rubric_file_mime: row.rubric_file_mime,
+    file_type: extension || row.rubric_file_mime || (row.rubric_file_path ? 'File' : 'Text'),
+    create_date: row.create_date,
+    assignment_id: row.assignment_id,
+    assignment_name: row.assignment_name,
+    course_name: row.course_name,
+    department: row.department,
+    batch: row.batch,
+    has_file: Boolean(row.rubric_file_path),
+    created_by: row.created_by,
+    can_delete: canDeleteRubricRow(req, row),
+  };
+}
+
+function rubricListSql(req, extraWhere = '') {
+  const params = [];
+  let accessWhere = '';
+
+  if (req.user?.role === 'teacher') {
+    accessWhere = `
+      AND (
+        r.created_by = ?
+        OR EXISTS (
+          SELECT 1
+          FROM lecturer_portfolio_assignments lpa
+          WHERE lpa.assignment_id = r.assignment_id
+            AND lpa.lecturer_user_id = ?
+        )
+      )
+    `;
+    params.push(req.user.user_id, req.user.user_id);
+  }
+
+  return {
+    sql: `
+      SELECT r.*, a.assignment_name, a.course_name, a.department, a.batch,
+             CASE WHEN EXISTS (
+               SELECT 1
+               FROM lecturer_portfolio_assignments lpa
+               WHERE lpa.assignment_id = r.assignment_id
+                 AND lpa.lecturer_user_id = ?
+             ) THEN 1 ELSE 0 END AS lecturer_assignment_access
+      FROM rubrics r
+      JOIN assignments a ON a.assignment_id = r.assignment_id
+      WHERE 1=1
+      ${accessWhere}
+      ${extraWhere}
+    `,
+    params: [req.user?.user_id || 0, ...params],
+  };
+}
+
+export async function listRubrics(req, res) {
+  try {
+    const { assignment_id, course_name, department, batch } = req.query;
+    const where = [];
+    const filterParams = [];
+
+    if (assignment_id) {
+      where.push('AND r.assignment_id = ?');
+      filterParams.push(Number(assignment_id));
+    }
+    if (course_name) {
+      where.push('AND a.course_name = ?');
+      filterParams.push(String(course_name));
+    }
+    if (department) {
+      where.push('AND LOWER(a.department) = LOWER(?)');
+      filterParams.push(String(department));
+    }
+    if (batch) {
+      where.push('AND a.batch = ?');
+      filterParams.push(String(batch));
+    }
+
+    const base = rubricListSql(req, where.join('\n'));
+    const rows = await query(
+      `${base.sql} ORDER BY r.create_date DESC, r.rubric_id DESC`,
+      [...base.params, ...filterParams]
+    );
+
+    res.json({ rubrics: rows.map((row) => safeRubric(row, req)) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed to load rubrics' });
+  }
+}
+
 export async function getRubricByAssignment(req, res) {
   const assignmentId = Number(req.params.assignmentId);
 
+  const base = rubricListSql(req, 'AND r.assignment_id = ?');
   const rows = await query(
-    'SELECT * FROM rubrics WHERE assignment_id=? ORDER BY rubric_id DESC',
-    [assignmentId]
+    `${base.sql} ORDER BY r.rubric_id DESC`,
+    [...base.params, assignmentId]
   );
 
-  res.json({ rubrics: rows });
+  res.json({ rubrics: rows.map((row) => safeRubric(row, req)) });
 }
 
 
@@ -97,9 +207,22 @@ export async function deleteRubric(req, res) {
       return res.status(400).json({ error: 'Invalid rubric id' });
     }
 
-    const rows = await query('SELECT * FROM rubrics WHERE rubric_id=?', [rubricId]);
+    const rows = await query(
+      `SELECT r.*, a.assignment_name, a.course_name, a.department, a.batch,
+              CASE WHEN EXISTS (
+                SELECT 1
+                FROM lecturer_portfolio_assignments lpa
+                WHERE lpa.assignment_id = r.assignment_id
+                  AND lpa.lecturer_user_id = ?
+              ) THEN 1 ELSE 0 END AS lecturer_assignment_access
+       FROM rubrics r
+       JOIN assignments a ON a.assignment_id = r.assignment_id
+       WHERE r.rubric_id=?`,
+      [req.user?.user_id || 0, rubricId]
+    );
     const rubric = rows[0];
     if (!rubric) return res.status(404).json({ error: 'Rubric not found' });
+    if (!canDeleteRubricRow(req, rubric)) return res.status(403).json({ error: 'Access denied' });
 
     await query('DELETE FROM rubrics WHERE rubric_id=?', [rubricId]);
 
@@ -126,9 +249,22 @@ export async function getRubricFile(req, res) {
       return res.status(400).json({ error: 'Invalid rubric id' });
     }
 
-    const rows = await query('SELECT * FROM rubrics WHERE rubric_id=?', [rubricId]);
+    const rows = await query(
+      `SELECT r.*, a.assignment_name, a.course_name, a.department, a.batch,
+              CASE WHEN EXISTS (
+                SELECT 1
+                FROM lecturer_portfolio_assignments lpa
+                WHERE lpa.assignment_id = r.assignment_id
+                  AND lpa.lecturer_user_id = ?
+              ) THEN 1 ELSE 0 END AS lecturer_assignment_access
+       FROM rubrics r
+       JOIN assignments a ON a.assignment_id = r.assignment_id
+       WHERE r.rubric_id=?`,
+      [req.user?.user_id || 0, rubricId]
+    );
     const rubric = rows[0];
     if (!rubric?.rubric_file_path) return res.status(404).json({ error: 'Rubric file not found' });
+    if (!canAccessRubricRow(req, rubric)) return res.status(403).json({ error: 'Access denied' });
 
     const relativePath = rubric.rubric_file_path.replace(/^\/+/, '').replace(/\//g, path.sep);
     const absolutePath = path.join(process.cwd(), relativePath);
@@ -138,6 +274,7 @@ export async function getRubricFile(req, res) {
     }
 
     res.type(rubric.rubric_file_mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${String(rubric.rubric_file_original_name || path.basename(absolutePath)).replace(/"/g, '')}"`);
     res.sendFile(absolutePath);
   } catch (e) {
     console.error(e);
