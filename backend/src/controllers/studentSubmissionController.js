@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { pool, query } from '../db.js';
+import { ensurePortfolioAccess } from '../services/lecturerAccess.js';
 
 const ALLOWED_EXTENSIONS_BY_TYPE = {
   pdf: ['.pdf'],
@@ -552,7 +553,7 @@ export async function viewSubmissionFileForStaff(req, res) {
 
     const file = (
       await query(
-        `SELECT file_id, file_path, original_name, mime_type
+        `SELECT file_id, portfolio_id, file_path, original_name, mime_type
          FROM portfolio_files
          WHERE file_id=?
            AND removed_at IS NULL
@@ -561,6 +562,9 @@ export async function viewSubmissionFileForStaff(req, res) {
       )
     )[0];
     if (!file) throw notFound('Submission file not found');
+    if (!file.portfolio_id) {
+      if (req.user?.role !== 'admin') throw accessDenied();
+    } else if (!(await ensurePortfolioAccess(req, res, Number(file.portfolio_id)))) return;
 
     const absolutePath = resolveStoredPath(file.file_path);
     if (!absolutePath || !fs.existsSync(absolutePath)) throw notFound('Submission file not found on disk');

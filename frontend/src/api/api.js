@@ -174,6 +174,22 @@ export const api = {
       request(`/api/grading/assignment/${assignmentId}/publish`, { method: 'POST' }),
   },
 
+  lecturerAssignments: {
+    lecturers: () => request('/api/lecturer-assignments/lecturers'),
+    submissions: (assignmentId) => request(`/api/lecturer-assignments/assignments/${assignmentId}/submissions`),
+    groups: (assignmentId) => request(`/api/lecturer-assignments/assignments/${assignmentId}/groups`),
+    assign: (payload) =>
+      request('/api/lecturer-assignments/assign', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    unassign: (payload) =>
+      request('/api/lecturer-assignments/unassign', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
   // /api/student
   student: {
     dashboard: () => request('/api/student/dashboard'),

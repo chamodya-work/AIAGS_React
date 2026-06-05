@@ -3,6 +3,7 @@ import path from 'path';
 import { z } from 'zod';
 import { query } from '../db.js';
 import { viewSubmissionFileForStaff } from './studentSubmissionController.js';
+import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
 
 const createPortfolioSchema = z.object({
   student_no: z.string().min(1),
@@ -54,6 +55,7 @@ export async function uploadPortfolio(req, res) {
 export async function listPortfolios(req, res) {
   const { assignment_id, batch } = req.query;
   const params = [];
+  const access = lecturerPortfolioJoin(req, 'p');
   let sql = `
     SELECT p.*, a.assignment_name, a.batch, a.course_name,
            (
@@ -68,9 +70,11 @@ export async function listPortfolios(req, res) {
              LIMIT 1
            ) AS primary_file_id
     FROM portfolios p
+    ${access.join}
     JOIN assignments a ON a.assignment_id = p.assignment_id
     WHERE 1=1
   `;
+  params.push(...access.params);
   if (assignment_id) { sql += ' AND p.assignment_id=?'; params.push(Number(assignment_id)); }
   if (batch) { sql += ' AND a.batch=?'; params.push(String(batch)); }
   sql += ' ORDER BY p.upload_date DESC';
@@ -80,6 +84,8 @@ export async function listPortfolios(req, res) {
 
 export async function getPortfolio(req, res) {
   const portfolioId = Number(req.params.id);
+  if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
+
   const rows = await query(
     `
     SELECT p.*, a.assignment_name, a.batch, a.course_name,

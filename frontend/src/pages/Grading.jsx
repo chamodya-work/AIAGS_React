@@ -1,5 +1,7 @@
 import { Fragment, useState, useEffect } from 'react';
 import { api } from '../api/api';
+import { useAuth } from '../components/AuthContext';
+import { normalizeRole } from '../utils/roles';
 
 const AI_STATUS_BADGE = {
   pending: 'badge-warning',
@@ -11,6 +13,8 @@ const AI_STATUS_BADGE = {
 const TABLE_COLUMN_COUNT = 10;
 
 export default function GradingPage() {
+  const { user } = useAuth();
+  const isAdmin = normalizeRole(user?.role) === 'admin';
   const [courses, setCourses] = useState([]);
   const [batches, setBatches] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -351,11 +355,13 @@ export default function GradingPage() {
           </div>
         )}
 
-        <div className="action-row">
-          <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
-            {publishing ? 'Publishing...' : 'PUBLISH GRADES TO STUDENTS'}
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="action-row">
+            <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
+              {publishing ? 'Publishing...' : 'PUBLISH GRADES TO STUDENTS'}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

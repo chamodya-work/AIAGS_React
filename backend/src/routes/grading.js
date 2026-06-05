@@ -20,6 +20,6 @@ router.get('/assignment/:assignmentId/results', requireAuth, requireRole('admin'
 router.get('/portfolio/:id/report', requireAuth, requireRole('admin','teacher'), getAiReport);
 router.get('/portfolio/:id/report/pdf', requireAuth, requireRole('admin','teacher'), getAiReportPdf);
 router.post('/portfolio/:id/final', requireAuth, requireRole('admin','teacher'), setFinalGrade);
-router.post('/assignment/:assignmentId/publish', requireAuth, requireRole('admin','teacher'), publishAssignmentGrades);
+router.post('/assignment/:assignmentId/publish', requireAuth, requireRole('admin'), publishAssignmentGrades);
 
 export default router;

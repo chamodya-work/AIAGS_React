@@ -6,6 +6,7 @@ const ADMIN_LINKS = [
   { to: '/portfolio/list',   label: 'View Portfolio List' },
   { to: '/portfolio/upload', label: 'Upload Portfolio' },
   { to: '/assignments',      label: 'Create Assignments' },
+  { to: '/assign-lecturers', label: 'Assign Lecturers' },
   { to: '/rubrics',          label: 'Add Rubrics' },
   { to: '/grading',          label: 'Grading' },
   { to: '/users',            label: 'Manage Users' },

@@ -8,6 +8,7 @@ import {
   makeReportFilename,
   resolveReportPdfPath,
 } from '../services/reportPdfService.js';
+import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
 
 const finalSchema = z.object({
   final_grade: z.coerce.number().min(0).max(100),
@@ -318,6 +319,7 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
 export async function gradeOne(req, res) {
   try {
     const portfolioId = Number(req.params.id);
+    if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
     const options = gradeOptionsSchema.parse(req.body || {});
 
     const result = await runAiGradingForPortfolio(portfolioId, options);
@@ -335,10 +337,12 @@ export async function gradeAssignment(req, res) {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const options = gradeOptionsSchema.parse(req.body || {});
+    const access = lecturerPortfolioJoin(req, 'p');
 
     const portfolios = await query(
       `SELECT p.portfolio_id
        FROM portfolios p
+       ${access.join}
        LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
        WHERE p.assignment_id=?
          AND (
@@ -347,7 +351,7 @@ export async function gradeAssignment(req, res) {
            OR ag.ai_status IN ('pending','failed')
          )
        ORDER BY p.upload_date ASC`,
-      [assignmentId, options.forceRegrade === true]
+      [...access.params, assignmentId, options.forceRegrade === true]
     );
 
     const results = [];
@@ -366,14 +370,16 @@ export async function gradeAssignment(req, res) {
 
 export async function getAssignmentGradingStatus(req, res) {
   const assignmentId = Number(req.params.assignmentId);
+  const access = lecturerPortfolioJoin(req, 'p');
   const rows = await query(
     `SELECT p.portfolio_id, p.student_no, ag.ai_status, ag.ai_grade,
             ag.ai_grading_error, ag.ai_model, ag.grading_started_at, ag.graded_at
      FROM portfolios p
+     ${access.join}
      LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
      WHERE p.assignment_id=?
      ORDER BY p.upload_date DESC`,
-    [assignmentId]
+    [...access.params, assignmentId]
   );
 
   res.json({
@@ -387,6 +393,7 @@ export async function getAssignmentGradingStatus(req, res) {
 
 export async function getAiReport(req, res) {
   const portfolioId = Number(req.params.id);
+  if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
   const row = (
     await query(
       `SELECT ag.portfolio_id, ag.ai_status, ag.ai_grade, ag.ai_report_text, ag.ai_review_report,
@@ -430,6 +437,7 @@ export async function getAiReport(req, res) {
 
 export async function getAiReportPdf(req, res) {
   const portfolioId = Number(req.params.id);
+  if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
   const row = (
     await query(
       `SELECT ag.portfolio_id, ag.ai_status, ag.ai_grade, ag.ai_report_text, ag.ai_review_report,
@@ -487,6 +495,7 @@ export async function getAiReportPdf(req, res) {
 export async function setFinalGrade(req, res) {
   try {
     const portfolioId = Number(req.params.id);
+    if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
     const data = finalSchema.parse(req.body);
 
     const p = (await query('SELECT portfolio_id, student_no FROM portfolios WHERE portfolio_id=?', [portfolioId]))[0];
@@ -508,6 +517,7 @@ export async function setFinalGrade(req, res) {
 
 export async function listResultsByAssignment(req, res) {
   const assignmentId = Number(req.params.assignmentId);
+  const access = lecturerPortfolioJoin(req, 'p');
   const rows = await query(
     `
     SELECT p.portfolio_id, p.student_no, p.portfolio_link, p.upload_date,
@@ -527,12 +537,13 @@ export async function listResultsByAssignment(req, res) {
            ag.grading_started_at, ag.graded_at,
            fg.final_grade, fg.status
     FROM portfolios p
+    ${access.join}
     LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
     LEFT JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
     WHERE p.assignment_id=?
     ORDER BY p.upload_date DESC
     `,
-    [assignmentId]
+    [...access.params, assignmentId]
   );
 
   res.json({

@@ -935,6 +935,62 @@ html, body, #root {
 .submission-modal {
   max-width: 860px;
 }
+
+/* Assign lecturers */
+.assign-lecturers-card,
+.assign-groups-card {
+  max-width: 1120px;
+  margin: 0 auto 22px;
+}
+.assign-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 14px;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.assign-toolbar .form-select {
+  max-width: 340px;
+  min-width: 220px;
+}
+.assign-mode-note {
+  margin-top: 10px;
+  color: #666;
+  font-size: 13px;
+}
+.assign-lecturers-table {
+  min-width: 900px;
+}
+.assign-lecturers-table th:first-child,
+.assign-lecturers-table td:first-child {
+  width: 48px;
+  text-align: center;
+}
+.assign-groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.assign-group {
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfe;
+}
+.assign-group h3 {
+  margin: 0 0 10px;
+  color: var(--text-dark);
+  font-size: 15px;
+}
+.assign-group ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #444;
+  line-height: 1.7;
+}
 @media (max-width: 720px) {
   .student-summary-stats {
     margin-left: 0;
@@ -942,5 +998,10 @@ html, body, #root {
   .submission-file-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .assign-toolbar .form-select,
+  .assign-toolbar .btn {
+    width: 100%;
+    max-width: none;
   }
 }

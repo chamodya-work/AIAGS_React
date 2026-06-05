@@ -12,6 +12,7 @@ import EditAssignment   from './pages/EditAssignment';
 import Rubrics          from './pages/Rubrics';
 import Grading          from './pages/Grading';
 import ManageUsers      from './pages/ManageUsers';
+import AssignLecturers  from './pages/AssignLecturers';
 import ViewResult       from './pages/ViewResult';
 import UploadAssignment from './pages/UploadAssignment';
 import UploadPortfolio  from './pages/UploadPortfolio';
@@ -44,6 +45,7 @@ export default function App() {
             </Route>
 
             <Route element={<ProtectedRoute roles={['admin']} />}>
+              <Route path="/assign-lecturers" element={<AssignLecturers />} />
               <Route path="/portfolio/upload" element={<UploadPortfolio />} />
               <Route path="/users" element={<ManageUsers />} />
             </Route>
