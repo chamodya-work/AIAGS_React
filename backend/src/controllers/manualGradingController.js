@@ -3,7 +3,13 @@ import { query } from '../db.js';
 import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
 
 const saveManualGradeSchema = z.object({
-  manual_score: z.coerce.number().min(0).max(100),
+  manual_score: z.preprocess(
+    (value) => {
+      if (value === '' || value === null || value === undefined) return null;
+      return Number(value);
+    },
+    z.number().min(0).max(100).nullable()
+  ),
   manual_remark: z.string().max(5000).optional().nullable(),
   confirm_large_difference: z.boolean().optional(),
 });
@@ -23,8 +29,29 @@ function legacyStatusFromPublishStatus(publishStatus) {
   return publishStatus === 'published_to_student' ? 'PUBLISHED' : 'DRAFT';
 }
 
-function manualRow(row) {
+function hasManualDraftData(row) {
+  return row.manual_score != null
+    || row.final_grade != null
+    || Boolean(String(row.manual_remark || '').trim())
+    || row.saved_by != null;
+}
+
+function shouldHideDraftManualData(req, row, publishStatus) {
+  return req.user?.role === 'admin'
+    && publishStatus === 'draft'
+    && hasManualDraftData(row)
+    && row.saved_by_role !== 'admin';
+}
+
+function manualRow(row, req) {
   const publishStatus = publicStatus(row);
+  const hideDraft = shouldHideDraftManualData(req, row, publishStatus);
+  const visibleManualScore = hideDraft ? null : row.manual_score;
+  const visibleFinalGrade = hideDraft ? null : row.final_grade;
+  const visibleTeacherScore = hideDraft ? null : (row.manual_score ?? row.final_grade ?? null);
+  const visibleRemark = hideDraft ? '' : (row.manual_remark || '');
+  const notSubmittedMessage = 'Not submitted by lecturer yet';
+
   return {
     portfolio_id: row.portfolio_id,
     student_no: row.student_no,
@@ -35,19 +62,25 @@ function manualRow(row) {
     ai_grade: row.ai_grade,
     ai_grading_error: row.ai_grading_error,
     ai_model: row.ai_model,
-    teacher_score: row.manual_score ?? row.final_grade ?? null,
-    manual_score: row.manual_score,
-    final_grade: row.final_grade,
-    manual_remark: row.manual_remark || '',
-    saved_by: row.saved_by,
-    saved_by_role: row.saved_by_role,
-    saved_at: row.saved_at,
+    teacher_score: visibleTeacherScore,
+    manual_score: visibleManualScore,
+    final_grade: visibleFinalGrade,
+    manual_remark: visibleRemark,
+    manual_score_display: visibleTeacherScore,
+    manual_remark_display: hideDraft ? notSubmittedMessage : visibleRemark,
+    manual_draft_hidden: hideDraft,
+    head_visibility_status: hideDraft ? 'not_submitted' : publishStatus,
+    saved_by: hideDraft ? null : row.saved_by,
+    saved_by_role: hideDraft ? null : row.saved_by_role,
+    saved_by_label: hideDraft ? null : (row.saved_by_full_name || row.saved_by_display_name || row.saved_by_email || null),
+    saved_by_email: hideDraft ? null : (row.saved_by_email || null),
+    saved_at: hideDraft ? null : row.saved_at,
     publish_status: publishStatus,
     status: legacyStatusFromPublishStatus(publishStatus),
     submitted_to_head_at: row.submitted_to_head_at,
     published_at: row.published_at,
-    score_difference_warning: Boolean(row.score_difference_warning),
-    score_difference: row.score_difference,
+    score_difference_warning: hideDraft ? false : Boolean(row.score_difference_warning),
+    score_difference: hideDraft ? null : row.score_difference,
   };
 }
 
@@ -64,7 +97,8 @@ async function getPortfolioGradeContext(portfolioId) {
     await query(
       `SELECT p.portfolio_id, p.student_no, p.assignment_id,
               ag.ai_grade,
-              fg.status, fg.publish_status
+              fg.status, fg.publish_status, fg.final_grade, fg.manual_score,
+              fg.manual_remark, fg.saved_by, fg.saved_by_role
        FROM portfolios p
        LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
        LEFT JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
@@ -97,11 +131,16 @@ export async function listManualResultsByAssignment(req, res) {
               fg.final_grade, fg.manual_score, fg.manual_remark, fg.saved_by,
               fg.saved_by_role, fg.saved_at, fg.status, fg.publish_status,
               fg.submitted_to_head_at, fg.published_at,
-              fg.score_difference_warning, fg.score_difference
+              fg.score_difference_warning, fg.score_difference,
+              saved_u.email AS saved_by_email,
+              saved_u.display_name AS saved_by_display_name,
+              saved_t.full_name AS saved_by_full_name
        FROM portfolios p
        ${access.join}
        LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
        LEFT JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
+       LEFT JOIN users saved_u ON saved_u.user_id = fg.saved_by
+       LEFT JOIN teachers saved_t ON saved_t.user_id = saved_u.user_id
        WHERE p.assignment_id=?
        ORDER BY p.upload_date DESC, p.portfolio_id DESC`,
       [...access.params, assignmentId]
@@ -109,7 +148,7 @@ export async function listManualResultsByAssignment(req, res) {
 
     res.json({
       assignment_id: assignmentId,
-      results: rows.map(manualRow),
+      results: rows.map((row) => manualRow(row, req)),
     });
   } catch (e) {
     if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
@@ -129,9 +168,13 @@ export async function saveManualGrade(req, res) {
     if (publicStatus(context) === 'published_to_student' && req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Published grades can only be changed by admin/head' });
     }
+    if (shouldHideDraftManualData(req, context, publicStatus(context))) {
+      return res.status(403).json({ error: 'Lecturer draft grading has not been submitted to head yet' });
+    }
 
+    const manualScore = data.manual_score == null ? null : Number(data.manual_score);
     const aiScore = context.ai_grade == null ? null : Number(context.ai_grade);
-    const difference = aiScore == null ? null : Math.abs(Number(data.manual_score) - aiScore);
+    const difference = aiScore == null || manualScore == null ? null : Math.abs(manualScore - aiScore);
     const hasLargeDifference = difference != null && difference > 20;
 
     if (hasLargeDifference && !data.confirm_large_difference) {
@@ -139,7 +182,7 @@ export async function saveManualGrade(req, res) {
         error: 'The teacher score differs from the AI score by more than 20 marks. Please confirm before saving.',
         requires_confirmation: true,
         ai_score: aiScore,
-        teacher_score: data.manual_score,
+        teacher_score: manualScore,
         difference,
       });
     }
@@ -170,8 +213,8 @@ export async function saveManualGrade(req, res) {
         context.student_no,
         portfolioId,
         legacyStatus,
-        data.manual_score,
-        data.manual_score,
+        manualScore,
+        manualScore,
         remark,
         req.user.user_id,
         req.user.role,
@@ -225,7 +268,10 @@ export async function submitAssignmentToHead(req, res) {
            fg.publish_status='submitted_to_head',
            fg.submitted_to_head_at=NOW()
        WHERE p.assignment_id=?
-         AND fg.final_grade IS NOT NULL
+         AND (
+           fg.final_grade IS NOT NULL
+           OR (fg.manual_remark IS NOT NULL AND TRIM(fg.manual_remark) <> '')
+         )
          AND fg.publish_status <> 'published_to_student'`,
       [req.user.user_id, assignmentId]
     );
@@ -253,7 +299,11 @@ export async function publishAssignmentToStudents(req, res) {
            fg.published_by=?,
            fg.published_at=NOW()
        WHERE p.assignment_id=?
-         AND fg.final_grade IS NOT NULL`,
+         AND fg.final_grade IS NOT NULL
+         AND (
+           fg.publish_status IN ('submitted_to_head', 'published_to_student')
+           OR fg.saved_by_role = 'admin'
+         )`,
       [req.user.user_id, assignmentId]
     );
 

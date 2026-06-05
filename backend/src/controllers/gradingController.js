@@ -92,6 +92,24 @@ function sendReportPdf(res, filePath, portfolioId) {
   });
 }
 
+function finalPublishStatus(row) {
+  if (row.publish_status) return row.publish_status;
+  return row.status === 'PUBLISHED' ? 'published_to_student' : 'draft';
+}
+
+function shouldHideDraftFinalGrade(req, row) {
+  const publishStatus = finalPublishStatus(row);
+  const hasDraftData = row.final_grade != null
+    || row.manual_score != null
+    || Boolean(String(row.manual_remark || '').trim())
+    || row.saved_by != null;
+
+  return req.user?.role === 'admin'
+    && publishStatus === 'draft'
+    && hasDraftData
+    && row.saved_by_role !== 'admin';
+}
+
 async function markProcessing(portfolioId, rubricId) {
   await query(
     `INSERT INTO ai_grading
@@ -583,7 +601,8 @@ export async function listResultsByAssignment(req, res) {
            ag.rubric_id, ag.ai_grade, ag.ai_review_report, ag.ai_status,
            ag.ai_report_text, ag.ai_grading_error, ag.ai_model,
            ag.grading_started_at, ag.graded_at,
-           fg.final_grade, fg.status
+           fg.final_grade, fg.manual_score, fg.manual_remark,
+           fg.status, fg.publish_status, fg.saved_by, fg.saved_by_role
     FROM portfolios p
     ${access.join}
     LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
@@ -597,6 +616,7 @@ export async function listResultsByAssignment(req, res) {
   res.json({
     results: rows.map((row) => ({
       ...row,
+      final_grade: shouldHideDraftFinalGrade(req, row) ? null : row.final_grade,
       ai_status: row.ai_status || 'pending',
       ai_review_report: row.ai_report_text || row.ai_review_report,
     })),
@@ -615,6 +635,10 @@ export async function publishAssignmentGrades(req, res) {
         fg.published_at=NOW()
     WHERE p.assignment_id=?
       AND fg.final_grade IS NOT NULL
+      AND (
+        fg.publish_status IN ('submitted_to_head', 'published_to_student')
+        OR fg.saved_by_role = 'admin'
+      )
     `,
     [req.user.user_id, assignmentId]
   );

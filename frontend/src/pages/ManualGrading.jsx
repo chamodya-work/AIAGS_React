@@ -13,7 +13,7 @@ const AI_STATUS_BADGE = {
 const PUBLISH_STATUS_LABEL = {
   draft: 'Draft',
   submitted_to_head: 'Submitted to Head',
-  published_to_student: 'Published',
+  published_to_student: 'Published to Student',
 };
 
 const PUBLISH_STATUS_BADGE = {
@@ -22,7 +22,7 @@ const PUBLISH_STATUS_BADGE = {
   published_to_student: 'badge-success',
 };
 
-const TABLE_COLUMN_COUNT = 10;
+const TABLE_COLUMN_COUNT = 11;
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))].sort();
@@ -116,7 +116,7 @@ export default function ManualGrading() {
       const nextScores = {};
       const nextRemarks = {};
       rows.forEach((row) => {
-        nextScores[row.portfolio_id] = row.teacher_score ?? '';
+        nextScores[row.portfolio_id] = row.manual_score ?? row.teacher_score ?? '';
         nextRemarks[row.portfolio_id] = row.manual_remark || '';
       });
       setManualScores(nextScores);
@@ -184,18 +184,14 @@ export default function ManualGrading() {
 
   const handleSave = async (row) => {
     const score = manualScores[row.portfolio_id];
-    if (score === '' || score == null) {
-      setError('Enter a teacher/manual score before saving.');
-      return;
-    }
-
-    const scoreNumber = Number(score);
-    if (!Number.isFinite(scoreNumber) || scoreNumber < 0 || scoreNumber > 100) {
+    const scoreIsEmpty = score === '' || score == null;
+    const scoreNumber = scoreIsEmpty ? null : Number(score);
+    if (!scoreIsEmpty && (!Number.isFinite(scoreNumber) || scoreNumber < 0 || scoreNumber > 100)) {
       setError('Teacher/manual score must be between 0 and 100.');
       return;
     }
 
-    const requiresWarning = hasLargeAiDifference(row.ai_grade, scoreNumber);
+    const requiresWarning = scoreNumber != null && hasLargeAiDifference(row.ai_grade, scoreNumber);
     if (requiresWarning) {
       const confirmed = window.confirm('The teacher score differs from the AI score by more than 20 marks. Please confirm before saving.');
       if (!confirmed) return;
@@ -240,6 +236,21 @@ export default function ManualGrading() {
       setPublishing(false);
     }
   };
+
+  const hasPublishableGrades = results.some((row) => {
+    const score = row.manual_score ?? row.teacher_score ?? row.final_grade;
+    return score != null
+      && !row.manual_draft_hidden
+      && (
+        row.publish_status === 'submitted_to_head'
+        || row.publish_status === 'published_to_student'
+        || row.saved_by_role === 'admin'
+      );
+  });
+  const publishDisabled = publishing
+    || !filters.assignment_id
+    || results.length === 0
+    || (isAdmin && !hasPublishableGrades);
 
   return (
     <>
@@ -296,10 +307,11 @@ export default function ManualGrading() {
                   <th>AI Status</th>
                   <th>AI Score</th>
                   <th>AI Report</th>
-                  <th>Teacher Score</th>
-                  <th>Remark</th>
-                  <th>Save</th>
+                  <th>Manual/Teacher Score</th>
+                  <th>Lecturer Remark</th>
+                  <th>Submitted By</th>
                   <th>Publish Status</th>
+                  <th>Save</th>
                 </tr>
               </thead>
               <tbody>
@@ -315,7 +327,10 @@ export default function ManualGrading() {
                   const rowReportError = reportErrorsByPortfolio[row.portfolio_id];
                   const publishStatus = row.publish_status || 'draft';
                   const scoreWarning = hasLargeAiDifference(row.ai_grade, manualScores[row.portfolio_id]);
-                  const saveDisabled = savingId === row.portfolio_id || (!isAdmin && publishStatus === 'published_to_student');
+                  const draftHidden = isAdmin && row.manual_draft_hidden;
+                  const saveDisabled = savingId === row.portfolio_id
+                    || draftHidden
+                    || (!isAdmin && publishStatus === 'published_to_student');
 
                   return (
                     <Fragment key={row.portfolio_id}>
@@ -341,38 +356,63 @@ export default function ManualGrading() {
                           ) : '-'}
                         </td>
                         <td>
-                          <input
-                            className={`form-input manual-score-input${scoreWarning ? ' manual-score-warning' : ''}`}
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={manualScores[row.portfolio_id] ?? ''}
-                            onChange={e => setManualScores(prev => ({ ...prev, [row.portfolio_id]: e.target.value }))}
-                          />
-                          {scoreWarning && <div className="manual-warning-text">Differs from AI by more than 20.</div>}
+                          {draftHidden ? (
+                            <span className="manual-not-submitted">{row.manual_remark_display || 'Not submitted by lecturer yet'}</span>
+                          ) : (
+                            <>
+                              <input
+                                className={`form-input manual-score-input${scoreWarning ? ' manual-score-warning' : ''}`}
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={manualScores[row.portfolio_id] ?? ''}
+                                onChange={e => setManualScores(prev => ({ ...prev, [row.portfolio_id]: e.target.value }))}
+                              />
+                              {scoreWarning && <div className="manual-warning-text">Differs from AI by more than 20.</div>}
+                            </>
+                          )}
                         </td>
                         <td>
-                          <textarea
-                            className="form-input manual-remark-input"
-                            value={remarks[row.portfolio_id] ?? ''}
-                            onChange={e => setRemarks(prev => ({ ...prev, [row.portfolio_id]: e.target.value }))}
-                            placeholder="Manual checking note"
-                          />
+                          {draftHidden ? (
+                            <span className="manual-not-submitted">{row.manual_remark_display || 'Not submitted by lecturer yet'}</span>
+                          ) : (
+                            <>
+                              <textarea
+                                className="form-input manual-remark-input"
+                                value={remarks[row.portfolio_id] ?? ''}
+                                onChange={e => setRemarks(prev => ({ ...prev, [row.portfolio_id]: e.target.value }))}
+                                aria-label="Lecturer Remark / Manual Review Note"
+                                placeholder="Example: AI detected, Turnitin checked, Needs manual review"
+                              />
+                              <div className="manual-remark-label">Lecturer Remark / Manual Review Note</div>
+                              {row.manual_remark && (
+                                <div className="manual-remark-saved">{row.manual_remark}</div>
+                              )}
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          {row.saved_by_label ? (
+                            <div className="manual-saved-by">
+                              <strong>{row.saved_by_label}</strong>
+                              {row.saved_at && <span>{new Date(row.saved_at).toLocaleString()}</span>}
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td>
+                          <span className={`badge ${PUBLISH_STATUS_BADGE[publishStatus] || 'badge-warning'}`}>
+                            {PUBLISH_STATUS_LABEL[publishStatus] || publishStatus}
+                          </span>
                         </td>
                         <td>
                           <button
                             className="btn btn-success btn-sm"
                             onClick={() => handleSave(row)}
                             disabled={saveDisabled}
-                            title={saveDisabled && publishStatus === 'published_to_student' ? 'Published grades can only be changed by admin/head' : ''}
+                            title={draftHidden ? 'Lecturer draft is not submitted to head yet' : saveDisabled && publishStatus === 'published_to_student' ? 'Published grades can only be changed by admin/head' : ''}
                           >
                             {savingId === row.portfolio_id ? 'Saving...' : 'Save'}
                           </button>
-                        </td>
-                        <td>
-                          <span className={`badge ${PUBLISH_STATUS_BADGE[publishStatus] || 'badge-warning'}`}>
-                            {PUBLISH_STATUS_LABEL[publishStatus] || publishStatus}
-                          </span>
                         </td>
                       </tr>
                       {isReportOpen && (
@@ -412,7 +452,8 @@ export default function ManualGrading() {
           <button
             className="btn btn-primary"
             onClick={handlePublishAction}
-            disabled={publishing || !filters.assignment_id || results.length === 0}
+            disabled={publishDisabled}
+            title={isAdmin && !hasPublishableGrades ? 'No submitted manual grades are ready to publish.' : ''}
           >
             {publishing
               ? 'Processing...'

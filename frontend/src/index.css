@@ -998,7 +998,7 @@ html, body, #root {
   margin: 0 auto;
 }
 .manual-grading-table {
-  min-width: 1180px;
+  min-width: 1320px;
 }
 .manual-score-input {
   min-width: 88px;
@@ -1016,11 +1016,74 @@ html, body, #root {
   line-height: 1.3;
 }
 .manual-remark-input {
-  min-width: 220px;
+  min-width: 260px;
   min-height: 58px;
-  border-color: #f1c40f;
-  background: #fffef5;
+  border: 2px solid #d65a73;
+  background: #fff2f5;
   resize: vertical;
+}
+.manual-remark-input:focus {
+  border-color: #bd3151;
+}
+.manual-remark-label {
+  color: #9f2743;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 5px;
+}
+.manual-remark-saved {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-left: 4px solid #d65a73;
+  border-radius: 5px;
+  background: #fff6f8;
+  color: #6b1d2f;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.manual-saved-by {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+}
+.manual-saved-by strong {
+  color: var(--text-dark);
+  font-size: 13px;
+}
+.manual-saved-by span {
+  color: #666;
+  font-size: 11px;
+}
+.manual-not-submitted {
+  display: inline-block;
+  min-width: 150px;
+  padding: 7px 9px;
+  border: 1px solid #d7e3ef;
+  border-radius: 6px;
+  background: #f6f8fb;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.portfolio-list-table {
+  min-width: 1560px;
+}
+.portfolio-remark-cell {
+  min-width: 220px;
+}
+.portfolio-remark-note {
+  display: block;
+  padding: 7px 9px;
+  border-left: 4px solid #d65a73;
+  border-radius: 5px;
+  background: #fff6f8;
+  color: #6b1d2f;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .result-remark-panel {
   border: 1px solid #d7e3ef;
