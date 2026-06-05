@@ -4,24 +4,35 @@ import { api } from '../api/api';
 
 const STATUS_BADGE = {
   SUBMITTED: 'badge-success',
-  PENDING:   'badge-warning',
-  OVERDUE:   'badge-danger',
+  INCOMPLETE: 'badge-warning',
+  PENDING: 'badge-warning',
+  OVERDUE: 'badge-danger',
 };
 
 function formatDateTime(dateValue, timeValue) {
-  if (!dateValue) return '—';
+  if (!dateValue) return '-';
   const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return '-';
   const dateText = date.toLocaleDateString();
   return timeValue ? `${dateText} ${String(timeValue).slice(0, 5)}` : dateText;
 }
 
+function RequiredBadge({ mandatory }) {
+  return (
+    <span className={`badge ${mandatory ? 'badge-danger' : 'badge-info'}`}>
+      {mandatory ? 'Mandatory' : 'Optional'}
+    </span>
+  );
+}
+
 export default function StudentHome() {
   const navigate = useNavigate();
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewSubmission, setViewSubmission] = useState(null);
 
   useEffect(() => {
     api.student.dashboard()
@@ -38,21 +49,52 @@ export default function StudentHome() {
   const summary = data?.summary || {};
   const student = data?.student || {};
 
+  const handleViewSubmission = async (assignmentId) => {
+    setError('');
+    setViewLoading(true);
+    try {
+      const submission = await api.student.submission(assignmentId);
+      setViewSubmission(submission);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const handleOpenGuideline = async (assignmentId) => {
+    setError('');
+    try {
+      await api.assignments.openGuideline(assignmentId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleOpenFile = async (fileId) => {
+    setError('');
+    try {
+      await api.student.openSubmissionFile(fileId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <>
       <h1 className="page-title">My Assignments</h1>
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* Student info bar */}
       {student.student_no && (
-        <div style={{ background:'white', borderRadius:10, padding:'16px 24px', marginBottom:20, display:'flex', gap:32, flexWrap:'wrap', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div><span style={{ fontSize:12, color:'#999', textTransform:'uppercase' }}>Student No</span><br/><strong>{student.student_no}</strong></div>
-          <div><span style={{ fontSize:12, color:'#999', textTransform:'uppercase' }}>Batch</span><br/><strong>{student.batch || '—'}</strong></div>
-          <div><span style={{ fontSize:12, color:'#999', textTransform:'uppercase' }}>Course</span><br/><strong>{student.course_name || '—'}</strong></div>
-          <div style={{ marginLeft:'auto', display:'flex', gap:24 }}>
-            <div style={{ textAlign:'center' }}><div style={{ fontSize:22, fontWeight:700, color:'#27ae60' }}>{summary.submitted || 0}</div><div style={{ fontSize:11, color:'#999' }}>SUBMITTED</div></div>
-            <div style={{ textAlign:'center' }}><div style={{ fontSize:22, fontWeight:700, color:'#f39c12' }}>{summary.pending || 0}</div><div style={{ fontSize:11, color:'#999' }}>PENDING</div></div>
-            <div style={{ textAlign:'center' }}><div style={{ fontSize:22, fontWeight:700, color:'#e74c3c' }}>{summary.overdue || 0}</div><div style={{ fontSize:11, color:'#999' }}>OVERDUE</div></div>
+        <div className="student-summary-card">
+          <div><span>Student No</span><strong>{student.student_no}</strong></div>
+          <div><span>Batch</span><strong>{student.batch || '-'}</strong></div>
+          <div><span>Course</span><strong>{student.course_name || '-'}</strong></div>
+          <div className="student-summary-stats">
+            <div><strong style={{ color: '#27ae60' }}>{summary.submitted || 0}</strong><span>Submitted</span></div>
+            <div><strong style={{ color: '#f39c12' }}>{summary.incomplete || 0}</strong><span>Incomplete</span></div>
+            <div><strong style={{ color: '#f39c12' }}>{summary.pending || 0}</strong><span>Pending</span></div>
+            <div><strong style={{ color: '#e74c3c' }}>{summary.overdue || 0}</strong><span>Overdue</span></div>
           </div>
         </div>
       )}
@@ -64,6 +106,7 @@ export default function StudentHome() {
             <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All Status</option>
               <option value="PENDING">Pending</option>
+              <option value="INCOMPLETE">Incomplete</option>
               <option value="SUBMITTED">Submitted</option>
               <option value="OVERDUE">Overdue</option>
             </select>
@@ -74,7 +117,7 @@ export default function StudentHome() {
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
           <div className="table-container">
-            <table className="data-table">
+            <table className="data-table student-assignments-table">
               <thead>
                 <tr>
                   <th>Assignment</th>
@@ -82,13 +125,13 @@ export default function StudentHome() {
                   <th>Batch</th>
                   <th>Due Date/Time</th>
                   <th>Status</th>
-                  <th>Uploaded File</th>
-                  <th>Action</th>
+                  <th>View</th>
+                  <th>Edit</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign:'center', color:'#999', padding:'40px' }}>No assignments found.</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: 'center', color: '#999', padding: '40px' }}>No assignments found.</td></tr>
                 ) : filtered.map(a => (
                   <tr key={a.assignment_id}>
                     <td>{a.assignment_name}</td>
@@ -101,27 +144,21 @@ export default function StudentHome() {
                       </span>
                     </td>
                     <td>
-                      {a.portfolio_link ? (
-                        <a href={a.portfolio_link} target="_blank" rel="noreferrer">
-                          <button className="btn btn-info btn-sm">View Upload</button>
-                        </a>
-                      ) : (
-                        '—'
-                      )}
+                      <button
+                        className="btn btn-info btn-sm"
+                        onClick={() => handleViewSubmission(a.assignment_id)}
+                        disabled={viewLoading}
+                      >
+                        View
+                      </button>
                     </td>
                     <td>
-                      {a.status !== 'SUBMITTED' && (
-                        <button className="btn btn-primary btn-sm"
-                          onClick={() => navigate('/student/upload', { state: { assignment_id: a.assignment_id } })}>
-                          Upload
-                        </button>
-                      )}
-                      {a.status === 'SUBMITTED' && (
-                        <button className="btn btn-info btn-sm"
-                          onClick={() => navigate('/student/results')}>
-                          View Result
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => navigate(`/student/submission/${a.assignment_id}/edit`)}
+                      >
+                        {a.has_submission ? 'Edit' : 'Upload'}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -130,6 +167,64 @@ export default function StudentHome() {
           </div>
         )}
       </div>
+
+      {viewSubmission && (
+        <div className="modal-backdrop" onClick={() => setViewSubmission(null)}>
+          <div className="modal submission-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Submission Details</h3>
+              <button className="modal-close" onClick={() => setViewSubmission(null)}>x</button>
+            </div>
+
+            <div className="submission-meta">
+              <div><span>Assignment</span><strong>{viewSubmission.assignment.assignment_name}</strong></div>
+              <div><span>Course</span><strong>{viewSubmission.assignment.course_name || '-'}</strong></div>
+              <div><span>Batch</span><strong>{viewSubmission.assignment.batch || '-'}</strong></div>
+              <div><span>Due</span><strong>{formatDateTime(viewSubmission.assignment.deadline_date, viewSubmission.assignment.deadline_time)}</strong></div>
+            </div>
+
+            {viewSubmission.assignment.has_guideline && (
+              <button className="btn btn-info btn-sm" onClick={() => handleOpenGuideline(viewSubmission.assignment.assignment_id)}>
+                View Guideline
+              </button>
+            )}
+
+            <div className={`alert ${viewSubmission.portfolio.is_complete ? 'alert-success' : 'alert-warning'}`} style={{ marginTop: 14 }}>
+              Upload status: {viewSubmission.portfolio.is_complete ? 'Complete' : 'Incomplete'}
+              {!viewSubmission.portfolio.is_complete && viewSubmission.portfolio.missing_mandatory_documents?.length > 0 && (
+                <span> - Missing: {viewSubmission.portfolio.missing_mandatory_documents.join(', ')}</span>
+              )}
+            </div>
+
+            <div className="submission-groups">
+              {(viewSubmission.groups || []).map((group, index) => (
+                <div className="submission-group" key={group.requirement.id || `general-${index}`}>
+                  <div className="submission-group-header">
+                    <div>
+                      <strong>{group.requirement.document_name}</strong>
+                      <span>{String(group.requirement.allowed_file_type || '').replaceAll('_', ' ')}</span>
+                    </div>
+                    <RequiredBadge mandatory={group.requirement.is_mandatory} />
+                  </div>
+
+                  {group.files.length === 0 ? (
+                    <div className="submission-empty">No file uploaded.</div>
+                  ) : (
+                    <div className="submission-file-list">
+                      {group.files.map(file => (
+                        <div className="submission-file-row" key={file.file_id}>
+                          <span>{file.original_name}</span>
+                          <button className="btn btn-info btn-sm" onClick={() => handleOpenFile(file.file_id)}>View</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

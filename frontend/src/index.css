@@ -782,3 +782,165 @@ html, body, #root {
 .modal-header h3 { font-size: 18px; font-weight: 700; color: var(--text-dark); }
 .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #999; }
 .modal-close:hover { color: var(--danger-color); }
+
+/* Student submission workflow */
+.student-summary-card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px 24px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.student-summary-card span {
+  display: block;
+  font-size: 11px;
+  color: #777;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.student-summary-card strong {
+  display: block;
+  color: var(--text-dark);
+}
+.student-summary-stats {
+  margin-left: auto;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.student-summary-stats > div {
+  text-align: center;
+}
+.student-summary-stats strong {
+  font-size: 22px;
+}
+.student-assignments-table {
+  min-width: 920px;
+}
+.submission-editor-card {
+  max-width: 980px;
+  margin: 0 auto;
+}
+.student-upload-bar {
+  background: #f0f7ff;
+  border: 1px solid #b6dcf5;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+.submission-assignment-panel,
+.submission-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: #fbfcfe;
+}
+.submission-assignment-panel span,
+.submission-meta span {
+  display: block;
+  color: #777;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.submission-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.submission-group {
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+.submission-group-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.submission-group-header strong {
+  display: block;
+  color: var(--text-dark);
+  font-size: 14px;
+}
+.submission-group-header span:not(.badge) {
+  display: block;
+  color: #666;
+  font-size: 12px;
+  margin-top: 3px;
+  text-transform: capitalize;
+}
+.submission-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.submission-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #edf0f3;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #f8fafc;
+}
+.submission-file-row > span {
+  overflow-wrap: anywhere;
+}
+.submission-file-row > div {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.submission-file-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.submission-file-input input {
+  max-width: 520px;
+}
+.submission-file-input span,
+.submission-note,
+.submission-empty {
+  color: #666;
+  font-size: 13px;
+}
+.submission-note {
+  background: #fff8e1;
+  border: 1px solid #f5d982;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.submission-modal {
+  max-width: 860px;
+}
+@media (max-width: 720px) {
+  .student-summary-stats {
+    margin-left: 0;
+  }
+  .submission-file-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

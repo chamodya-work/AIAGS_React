@@ -24,6 +24,48 @@ function computeStatus(deadlineDate, deadlineTime, uploadedAt) {
   return due < now ? "OVERDUE" : "PENDING";
 }
 
+async function getSubmissionSummary(student, assignmentId) {
+  const identifiers = [student.student_no, student.email].filter(Boolean);
+  if (!identifiers.length) {
+    return { active_files: 0, is_complete: false, missing_mandatory_count: 0 };
+  }
+
+  const placeholders = identifiers.map(() => "?").join(",");
+  const [activeRow, mandatoryRows] = await Promise.all([
+    query(
+      `SELECT COUNT(*) AS active_files
+       FROM portfolio_files
+       WHERE assignment_id=?
+         AND student_no IN (${placeholders})
+         AND removed_at IS NULL`,
+      [assignmentId, ...identifiers]
+    ),
+    query(
+      `SELECT ard.id
+       FROM assignment_required_documents ard
+       WHERE ard.assignment_id=?
+         AND ard.is_mandatory=1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM portfolio_files pf
+           WHERE pf.assignment_id=ard.assignment_id
+             AND pf.required_document_id=ard.id
+             AND pf.student_no IN (${placeholders})
+             AND pf.removed_at IS NULL
+         )`,
+      [assignmentId, ...identifiers]
+    ),
+  ]);
+
+  const activeFiles = Number(activeRow[0]?.active_files || 0);
+  const missingMandatoryCount = mandatoryRows.length;
+  return {
+    active_files: activeFiles,
+    is_complete: activeFiles > 0 && missingMandatoryCount === 0,
+    missing_mandatory_count: missingMandatoryCount,
+  };
+}
+
 export async function getMyDashboard(req, res) {
   try {
     const userId = req.user?.user_id;
@@ -84,10 +126,14 @@ export async function getMyDashboard(req, res) {
     const next7 = new Date(today);
     next7.setDate(next7.getDate() + 7);
 
-    const normalized = assignments.map((a) => {
+    const normalized = await Promise.all(assignments.map(async (a) => {
       const deadline = toDateOnly(a.deadline_date);
       const uploadDate = a.upload_date ? new Date(a.upload_date).toISOString() : null;
-      const status = computeStatus(deadline, a.deadline_time, uploadDate);
+      const submissionSummary = await getSubmissionSummary(student, a.assignment_id);
+      const baseStatus = computeStatus(deadline, a.deadline_time, submissionSummary.active_files > 0 ? uploadDate : null);
+      const status = submissionSummary.active_files > 0
+        ? (submissionSummary.is_complete ? "SUBMITTED" : "INCOMPLETE")
+        : baseStatus;
       return {
         assignment_id: a.assignment_id,
         assignment_name: a.assignment_name,
@@ -100,15 +146,19 @@ export async function getMyDashboard(req, res) {
         deadline_time: a.deadline_time || null,
         remark: a.remark,
         portfolio_id: a.portfolio_id || null,
-        portfolio_link: a.portfolio_link || null,
+        has_submission: submissionSummary.active_files > 0,
+        submission_complete: submissionSummary.is_complete,
+        active_file_count: submissionSummary.active_files,
+        missing_mandatory_count: submissionSummary.missing_mandatory_count,
         upload_date: uploadDate,
         status,
       };
-    });
+    }));
 
     const summary = normalized.reduce(
       (acc, row) => {
         if (row.status === "SUBMITTED") acc.submitted += 1;
+        if (row.status === "INCOMPLETE") acc.incomplete += 1;
         if (row.status === "PENDING") acc.pending += 1;
         if (row.status === "OVERDUE") acc.overdue += 1;
 
@@ -119,7 +169,7 @@ export async function getMyDashboard(req, res) {
         }
         return acc;
       },
-      { submitted: 0, pending: 0, overdue: 0, upcoming_7_days: 0 }
+      { submitted: 0, incomplete: 0, pending: 0, overdue: 0, upcoming_7_days: 0 }
     );
 
     return res.json({

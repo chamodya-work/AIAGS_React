@@ -137,6 +137,19 @@ export default function GradingPage() {
     }
   };
 
+  const handleOpenPortfolioFile = async (row) => {
+    setError('');
+    try {
+      if (row.primary_file_id) {
+        await api.portfolios.openFile(row.primary_file_id);
+      } else if (row.portfolio_link) {
+        window.open(row.portfolio_link, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleSetFinal = async (portfolioId) => {
     const score = finalScores[portfolioId];
     if (score === '' || score === undefined) { setError('Enter a score first.'); return; }
@@ -240,10 +253,10 @@ export default function GradingPage() {
                         <td>{r.student_no}</td>
                         <td>{r.upload_date ? new Date(r.upload_date).toLocaleDateString() : '-'}</td>
                         <td>
-                          {r.portfolio_link && (
-                            <a href={r.portfolio_link} target="_blank" rel="noreferrer">
-                              <button className="icon-btn">View</button>
-                            </a>
+                          {(r.primary_file_id || r.portfolio_link) && (
+                            <button className="btn btn-info btn-sm" onClick={() => handleOpenPortfolioFile(r)}>
+                              View
+                            </button>
                           )}
                         </td>
                         <td>

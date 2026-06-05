@@ -70,11 +70,20 @@ class RubricInfo(BaseModel):
     file_original_name: Optional[str] = None
 
 
+class SubmissionFileInfo(BaseModel):
+    file_id: Optional[int] = None
+    file_path: str
+    file_original_name: Optional[str] = None
+    file_mime: Optional[str] = None
+    required_document_name: Optional[str] = None
+
+
 class SubmissionInfo(BaseModel):
     portfolio_id: int
     file_path: str
     portfolio_link: Optional[str] = None
     uploaded_at: Optional[str] = None
+    files: Optional[List[SubmissionFileInfo]] = None
 
 
 class GradeRequest(BaseModel):
@@ -311,6 +320,29 @@ def extract_submission_file_text(file_path: str, index: int = 1) -> str:
     filename = os.path.basename(file_path)
     content = extract_text(file_path, "student submission", SUBMISSION_EXTENSIONS)
     return f"FILE {index}: {filename}\n{content}"
+
+
+def submission_content(req: GradeRequest) -> str:
+    parts: List[str] = []
+    seen_paths: Set[str] = set()
+    files = req.submission.files or []
+
+    for index, file_info in enumerate(files, start=1):
+        if not file_info.file_path or file_info.file_path in seen_paths:
+            continue
+        seen_paths.add(file_info.file_path)
+        heading = extract_submission_file_text(file_info.file_path, index)
+        if file_info.required_document_name:
+            heading = f"REQUIRED DOCUMENT: {file_info.required_document_name}\n{heading}"
+        parts.append(heading)
+
+    if not parts and req.submission.file_path:
+        parts.append(extract_submission_file_text(req.submission.file_path))
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        raise ValueError("Student submission content is missing or unreadable.")
+    return _truncate(text)
 
 
 def rubric_content(req: GradeRequest) -> str:
@@ -657,7 +689,7 @@ def health():
 def grade(req: GradeRequest):
     try:
         rubric_text = rubric_content(req)
-        submission_text = extract_submission_file_text(req.submission.file_path)
+        submission_text = submission_content(req)
 
         first_error = None
         structured = None
@@ -705,7 +737,7 @@ def grade(req: GradeRequest):
 def feedback(req: GradeRequest):
     try:
         rubric_text = rubric_content(req)
-        submission_text = extract_submission_file_text(req.submission.file_path)
+        submission_text = submission_content(req)
 
         first_error = None
         structured = None

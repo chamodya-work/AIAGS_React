@@ -4,13 +4,13 @@ import { api } from '../api/api';
 const STATUSES = ['PUBLISHED', 'DRAFT'];
 
 export default function ViewPortfolioList() {
-  const [portfolios, setPortfolios]   = useState([]);
+  const [portfolios, setPortfolios] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [selAssignment, setSelAssignment] = useState('');
-  const [filterStatus, setFilterStatus]   = useState('');
-  const [search, setSearch]           = useState('');
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     Promise.all([api.portfolios.list(), api.assignments.list()])
@@ -28,11 +28,13 @@ export default function ViewPortfolioList() {
     try {
       const d = await api.portfolios.list(aId ? { assignment_id: aId } : {});
       setPortfolios(d.portfolios || []);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // For grading results we need the join data
   const [results, setResults] = useState({});
 
   const loadGradingForAssignment = async (aId) => {
@@ -42,7 +44,9 @@ export default function ViewPortfolioList() {
       const map = {};
       (d.results || []).forEach(r => { map[r.portfolio_id] = r; });
       setResults(map);
-    } catch { setResults({}); }
+    } catch {
+      setResults({});
+    }
   };
 
   const handleAssignmentChange = async (aId) => {
@@ -50,11 +54,25 @@ export default function ViewPortfolioList() {
     await loadGradingForAssignment(aId);
   };
 
+  const handleOpenFile = async (portfolio) => {
+    setError('');
+    try {
+      if (portfolio.primary_file_id) {
+        await api.portfolios.openFile(portfolio.primary_file_id);
+      } else if (portfolio.portfolio_link) {
+        window.open(portfolio.portfolio_link, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const filtered = portfolios.filter(p => {
     const grading = results[p.portfolio_id];
     const status = grading?.status || '';
     const matchStatus = !filterStatus || status === filterStatus;
-    const matchSearch = !search || (p.student_no + ' ' + (p.portfolio_link || '')).toLowerCase().includes(search.toLowerCase());
+    const searchable = `${p.student_no || ''} ${p.portfolio_link || ''} ${p.assignment_name || ''}`.toLowerCase();
+    const matchSearch = !search || searchable.includes(search.toLowerCase());
     return matchStatus && matchSearch;
   });
 
@@ -81,10 +99,10 @@ export default function ViewPortfolioList() {
           </div>
           <div className="filter-group">
             <label className="filter-label">Search Student</label>
-            <input className="search-input" placeholder="Student number…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input className="search-input" placeholder="Student number..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Print</button>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Print</button>
           </div>
         </div>
 
@@ -107,27 +125,27 @@ export default function ViewPortfolioList() {
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign:'center', color:'#999', padding:'32px' }}>No portfolios found.</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>No portfolios found.</td></tr>
                 ) : filtered.map(p => {
                   const grading = results[p.portfolio_id];
                   return (
                     <tr key={p.portfolio_id}>
                       <td>{p.student_no}</td>
-                      <td>{p.assignment_name || '—'}</td>
-                      <td>{p.batch || '—'}</td>
-                      <td>{p.upload_date ? new Date(p.upload_date).toLocaleDateString() : '—'}</td>
-                      <td style={{ fontWeight:700, color:'#2196F3' }}>{grading?.ai_grade ?? '—'}</td>
-                      <td style={{ fontWeight:700, color:'#27ae60' }}>{grading?.final_grade ?? '—'}</td>
+                      <td>{p.assignment_name || '-'}</td>
+                      <td>{p.batch || '-'}</td>
+                      <td>{p.upload_date ? new Date(p.upload_date).toLocaleDateString() : '-'}</td>
+                      <td style={{ fontWeight: 700, color: '#2196F3' }}>{grading?.ai_grade ?? '-'}</td>
+                      <td style={{ fontWeight: 700, color: '#27ae60' }}>{grading?.final_grade ?? '-'}</td>
                       <td>
                         <span className={`badge ${grading?.status === 'PUBLISHED' ? 'badge-success' : 'badge-warning'}`}>
                           {grading?.status || 'NOT GRADED'}
                         </span>
                       </td>
                       <td>
-                        {p.portfolio_link && (
-                          <a href={p.portfolio_link} target="_blank" rel="noreferrer">
-                            <button className="icon-btn">📄</button>
-                          </a>
+                        {(p.primary_file_id || p.portfolio_link) && (
+                          <button className="btn btn-info btn-sm" onClick={() => handleOpenFile(p)}>
+                            View
+                          </button>
                         )}
                       </td>
                     </tr>

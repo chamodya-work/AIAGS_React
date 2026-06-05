@@ -183,7 +183,30 @@ async function getPortfolioForGrading(portfolioId) {
   )[0];
 }
 
-function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath) {
+async function getActivePortfolioFiles(portfolioId) {
+  const rows = await query(
+    `SELECT pf.file_id, pf.file_path, pf.original_name, pf.mime_type,
+            ard.document_name
+     FROM portfolio_files pf
+     LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+     WHERE pf.portfolio_id=?
+       AND pf.removed_at IS NULL
+     ORDER BY CASE
+       WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
+       ELSE 1
+     END, pf.uploaded_at DESC, pf.file_id DESC`,
+    [portfolioId]
+  );
+
+  return rows
+    .map((row) => {
+      const absolutePath = resolveUploadPath(row.file_path);
+      return { ...row, absolute_path: absolutePath };
+    })
+    .filter((row) => row.absolute_path && fs.existsSync(row.absolute_path));
+}
+
+function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, submissionFiles = []) {
   return {
     portfolio_id: portfolio.portfolio_id,
     assignment: {
@@ -212,6 +235,13 @@ function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath) {
       file_path: portfolioFilePath,
       portfolio_link: portfolio.portfolio_link,
       uploaded_at: portfolio.upload_date,
+      files: submissionFiles.map((file) => ({
+        file_id: file.file_id,
+        file_path: file.absolute_path,
+        file_original_name: file.original_name,
+        file_mime: file.mime_type || null,
+        required_document_name: file.document_name || null,
+      })),
     },
   };
 }
@@ -240,7 +270,11 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
       return { portfolio_id: portfolioId, ok: false, status: 'failed', error: 'No rubric is attached to this assignment' };
     }
 
-    const portfolioFilePath = resolveUploadPath(portfolio.portfolio_link);
+    const activeFiles = await getActivePortfolioFiles(portfolioId);
+    const supportedActiveFiles = activeFiles.filter((file) => /\.(pdf|docx)$/i.test(file.file_path || ''));
+    const representativeFile = supportedActiveFiles[0] || activeFiles[0] || null;
+    const portfolioFilePath = representativeFile?.absolute_path || resolveUploadPath(portfolio.portfolio_link);
+
     if (!portfolioFilePath || !fs.existsSync(portfolioFilePath)) {
       const message = 'Student submission file is missing on disk';
       await markFailed(portfolioId, rubric.rubric_id, message);
@@ -257,7 +291,7 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
     await markProcessing(portfolioId, rubric.rubric_id);
 
     const mlResult = await gradePortfolio(
-      buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath)
+      buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, supportedActiveFiles)
     );
 
     await markGraded(portfolioId, rubric.rubric_id, mlResult);
@@ -477,6 +511,17 @@ export async function listResultsByAssignment(req, res) {
   const rows = await query(
     `
     SELECT p.portfolio_id, p.student_no, p.portfolio_link, p.upload_date,
+           (
+             SELECT pf.file_id
+             FROM portfolio_files pf
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+             ORDER BY CASE
+               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
+               ELSE 1
+             END, pf.uploaded_at DESC, pf.file_id DESC
+             LIMIT 1
+           ) AS primary_file_id,
            ag.rubric_id, ag.ai_grade, ag.ai_review_report, ag.ai_status,
            ag.ai_report_text, ag.ai_grading_error, ag.ai_model,
            ag.grading_started_at, ag.graded_at,

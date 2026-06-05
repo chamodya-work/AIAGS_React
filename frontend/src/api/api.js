@@ -145,6 +145,7 @@ export const api = {
       return request('/api/portfolios/upload', { method: 'POST', body: fd });
     },
     remove: (id) => request(`/api/portfolios/${id}`, { method: 'DELETE' }),
+    openFile: (fileId) => openAuthorizedFile(`/api/portfolios/files/${fileId}/view`),
   },
 
   // /api/grading
@@ -177,6 +178,20 @@ export const api = {
   student: {
     dashboard: () => request('/api/student/dashboard'),
     result: (assignmentId) => request(`/api/student/results/${assignmentId}`),
+    assignmentRequirements: (assignmentId) => request(`/api/student/assignments/${assignmentId}/requirements`),
+    submission: (assignmentId) => request(`/api/student/assignments/${assignmentId}/submission`),
+    saveSubmission: (assignmentId, payload) =>
+      request(`/api/student/assignments/${assignmentId}/submission`, {
+        method: 'POST',
+        body: payload,
+      }),
+    updateSubmission: (assignmentId, payload) =>
+      request(`/api/student/assignments/${assignmentId}/submission`, {
+        method: 'PUT',
+        body: payload,
+      }),
+    removeSubmissionFile: (fileId) => request(`/api/student/submission-files/${fileId}`, { method: 'DELETE' }),
+    openSubmissionFile: (fileId) => openAuthorizedFile(`/api/student/submission-files/${fileId}/view`),
     feedbackAttempts: (assignmentId) => request(`/api/student/feedback/attempts/${assignmentId}`),
     feedbackHistory: (assignmentId) => request(`/api/student/feedback/history/${assignmentId}`),
     requestFeedback: (assignmentId) =>

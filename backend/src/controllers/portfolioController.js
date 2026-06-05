@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
 import { query } from '../db.js';
+import { viewSubmissionFileForStaff } from './studentSubmissionController.js';
 
 const createPortfolioSchema = z.object({
   student_no: z.string().min(1),
@@ -54,7 +55,18 @@ export async function listPortfolios(req, res) {
   const { assignment_id, batch } = req.query;
   const params = [];
   let sql = `
-    SELECT p.*, a.assignment_name, a.batch, a.course_name
+    SELECT p.*, a.assignment_name, a.batch, a.course_name,
+           (
+             SELECT pf.file_id
+             FROM portfolio_files pf
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+             ORDER BY CASE
+               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
+               ELSE 1
+             END, pf.uploaded_at DESC, pf.file_id DESC
+             LIMIT 1
+           ) AS primary_file_id
     FROM portfolios p
     JOIN assignments a ON a.assignment_id = p.assignment_id
     WHERE 1=1
@@ -70,7 +82,18 @@ export async function getPortfolio(req, res) {
   const portfolioId = Number(req.params.id);
   const rows = await query(
     `
-    SELECT p.*, a.assignment_name, a.batch, a.course_name
+    SELECT p.*, a.assignment_name, a.batch, a.course_name,
+           (
+             SELECT pf.file_id
+             FROM portfolio_files pf
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+             ORDER BY CASE
+               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
+               ELSE 1
+             END, pf.uploaded_at DESC, pf.file_id DESC
+             LIMIT 1
+           ) AS primary_file_id
     FROM portfolios p
     JOIN assignments a ON a.assignment_id = p.assignment_id
     WHERE p.portfolio_id=?
@@ -80,6 +103,8 @@ export async function getPortfolio(req, res) {
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });
   res.json({ portfolio: rows[0] });
 }
+
+export { viewSubmissionFileForStaff };
 
 export async function deletePortfolio(req, res) {
   const portfolioId = Number(req.params.id);

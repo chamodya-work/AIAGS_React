@@ -51,6 +51,7 @@ export default function App() {
             <Route element={<ProtectedRoute roles={['student']} />}>
               <Route path="/student/home" element={<StudentHome />} />
               <Route path="/student/upload" element={<UploadAssignment />} />
+              <Route path="/student/submission/:assignmentId/edit" element={<UploadAssignment />} />
               <Route path="/student/feedback" element={<GetFeedback />} />
               <Route path="/student/results" element={<ViewResult />} />
             </Route>

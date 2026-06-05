@@ -43,6 +43,11 @@ app.use('/uploads/guidelines', (req, res) => {
   res.status(403).json({ error: 'Access denied' });
 });
 
+// Student required-document submission files must stay behind protected API routes.
+app.use('/uploads/submissions', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
 // Uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
