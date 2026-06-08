@@ -195,6 +195,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    distribute: (payload) =>
+      request('/api/lecturer-assignments/distribute', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
     unassign: (payload) =>
       request('/api/lecturer-assignments/unassign', {
         method: 'POST',
@@ -214,6 +219,11 @@ export const api = {
       request(`/api/manual-grading/assignment/${assignmentId}/submit-to-head`, { method: 'POST' }),
     publishToStudents: (assignmentId) =>
       request(`/api/manual-grading/assignment/${assignmentId}/publish-to-students`, { method: 'POST' }),
+  },
+
+  notifications: {
+    sendDeadlineReminders: () =>
+      request('/api/notifications/send-deadline-reminders', { method: 'POST' }),
   },
 
   // /api/student

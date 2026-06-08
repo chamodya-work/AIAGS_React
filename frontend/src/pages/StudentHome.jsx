@@ -4,9 +4,9 @@ import { api } from '../api/api';
 
 const STATUS_BADGE = {
   SUBMITTED: 'badge-success',
-  INCOMPLETE: 'badge-warning',
-  PENDING: 'badge-warning',
-  OVERDUE: 'badge-danger',
+  MISSING_REQUIRED: 'badge-warning',
+  OPEN: 'badge-info',
+  CLOSED: 'badge-danger',
 };
 
 function formatDateTime(dateValue, timeValue) {
@@ -15,6 +15,14 @@ function formatDateTime(dateValue, timeValue) {
   if (Number.isNaN(date.getTime())) return '-';
   const dateText = date.toLocaleDateString();
   return timeValue ? `${dateText} ${String(timeValue).slice(0, 5)}` : dateText;
+}
+
+function statusLabel(status) {
+  if (status === 'MISSING_REQUIRED') return 'Missing Required Documents';
+  if (status === 'OPEN') return 'Open';
+  if (status === 'CLOSED') return 'Closed';
+  if (status === 'SUBMITTED') return 'Submitted';
+  return status || '-';
 }
 
 function RequiredBadge({ mandatory }) {
@@ -92,9 +100,9 @@ export default function StudentHome() {
           <div><span>Course</span><strong>{student.course_name || '-'}</strong></div>
           <div className="student-summary-stats">
             <div><strong style={{ color: '#27ae60' }}>{summary.submitted || 0}</strong><span>Submitted</span></div>
-            <div><strong style={{ color: '#f39c12' }}>{summary.incomplete || 0}</strong><span>Incomplete</span></div>
-            <div><strong style={{ color: '#f39c12' }}>{summary.pending || 0}</strong><span>Pending</span></div>
-            <div><strong style={{ color: '#e74c3c' }}>{summary.overdue || 0}</strong><span>Overdue</span></div>
+            <div><strong style={{ color: '#f39c12' }}>{summary.incomplete || 0}</strong><span>Missing Docs</span></div>
+            <div><strong style={{ color: '#3498db' }}>{summary.pending || 0}</strong><span>Open</span></div>
+            <div><strong style={{ color: '#e74c3c' }}>{summary.overdue || 0}</strong><span>Closed</span></div>
           </div>
         </div>
       )}
@@ -105,10 +113,10 @@ export default function StudentHome() {
             <label className="filter-label">Filter by Status</label>
             <select className="filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">All Status</option>
-              <option value="PENDING">Pending</option>
-              <option value="INCOMPLETE">Incomplete</option>
+              <option value="OPEN">Open</option>
+              <option value="MISSING_REQUIRED">Missing Required Documents</option>
               <option value="SUBMITTED">Submitted</option>
-              <option value="OVERDUE">Overdue</option>
+              <option value="CLOSED">Closed</option>
             </select>
           </div>
         </div>
@@ -140,7 +148,7 @@ export default function StudentHome() {
                     <td>{formatDateTime(a.deadline_date, a.deadline_time)}</td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[a.status] || 'badge-warning'}`}>
-                        {a.status}
+                        {statusLabel(a.status)}
                       </span>
                     </td>
                     <td>
@@ -156,8 +164,9 @@ export default function StudentHome() {
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => navigate(`/student/submission/${a.assignment_id}/edit`)}
+                        disabled={a.submission_open === false}
                       >
-                        {a.has_submission ? 'Edit' : 'Upload'}
+                        {a.submission_open === false ? 'Closed' : (a.has_submission ? 'Edit' : 'Upload')}
                       </button>
                     </td>
                   </tr>
@@ -181,6 +190,7 @@ export default function StudentHome() {
               <div><span>Course</span><strong>{viewSubmission.assignment.course_name || '-'}</strong></div>
               <div><span>Batch</span><strong>{viewSubmission.assignment.batch || '-'}</strong></div>
               <div><span>Due</span><strong>{formatDateTime(viewSubmission.assignment.deadline_date, viewSubmission.assignment.deadline_time)}</strong></div>
+              <div><span>Submission</span><strong>{viewSubmission.assignment.submission_open === false ? 'Closed' : 'Open'}</strong></div>
             </div>
 
             {viewSubmission.assignment.has_guideline && (

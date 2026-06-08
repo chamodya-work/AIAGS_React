@@ -982,6 +982,158 @@ html, body, #root {
   color: #666;
   font-size: 13px;
 }
+.assign-settings-card {
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.assign-settings-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.assign-settings-header h2 {
+  margin: 0;
+  color: var(--text-dark);
+  font-size: 16px;
+}
+.assign-settings-header p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+.assign-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.assign-mode-select,
+.assign-manual-select {
+  max-width: 340px;
+  min-width: 240px;
+}
+.assign-section {
+  padding: 14px;
+  border: 1px solid #e5ebf1;
+  border-radius: 8px;
+  background: #fff;
+  margin-top: 12px;
+}
+.assign-section-title {
+  display: block;
+  color: var(--text-dark);
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.assign-helper-text {
+  margin-top: 9px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.assign-lecturer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.assign-checkbox-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #dce5ee;
+  border-radius: 8px;
+  background: #f9fbfd;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s, background-color 0.18s, box-shadow 0.18s;
+}
+.assign-checkbox-card:hover,
+.assign-checkbox-card.selected {
+  border-color: var(--secondary-color);
+  background: #eef7ff;
+  box-shadow: 0 1px 4px rgba(52, 152, 219, 0.16);
+}
+.assign-checkbox-card input {
+  flex: 0 0 auto;
+}
+.assign-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.assign-option-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #e5ebf1;
+  border-radius: 8px;
+  background: #f9fbfd;
+  color: #344054;
+}
+.assign-option-row input {
+  margin-top: 2px;
+}
+.assign-option-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.assign-option-row strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.assign-option-row small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.assign-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5ebf1;
+}
+.distribution-preview {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #d7e3ef;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+.distribution-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.distribution-preview-header h3 {
+  margin: 0;
+  color: var(--text-dark);
+  font-size: 15px;
+}
+.distribution-preview-header span {
+  color: #666;
+  font-size: 13px;
+  font-weight: 700;
+}
 .assign-lecturers-table {
   min-width: 900px;
 }
@@ -1132,6 +1284,17 @@ html, body, #root {
   }
   .assign-toolbar .form-select,
   .assign-toolbar .btn {
+    width: 100%;
+    max-width: none;
+  }
+  .assign-settings-row,
+  .assign-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .assign-mode-select,
+  .assign-manual-select,
+  .assign-actions .btn {
     width: 100%;
     max-width: none;
   }

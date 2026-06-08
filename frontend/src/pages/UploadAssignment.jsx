@@ -12,6 +12,8 @@ const ACCEPT_BY_TYPE = {
   any_supported_document: '.pdf,.docx,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.csv',
 };
 
+const DEADLINE_CLOSED_MESSAGE = 'The submission deadline has passed. You can no longer upload or edit this assignment.';
+
 function formatDateTime(dateValue, timeValue) {
   if (!dateValue) return '-';
   const date = new Date(dateValue);
@@ -99,6 +101,7 @@ export default function UploadAssignment() {
 
   const handleSubmit = async () => {
     if (!selAssignment) { setError('Select an assignment first.'); return; }
+    if (selectedAssignment?.submission_open === false) { setError(DEADLINE_CLOSED_MESSAGE); return; }
     if (!hasSelectedFiles && !submission?.files?.length) { setError('Choose at least one file to upload.'); return; }
 
     const fd = new FormData();
@@ -146,6 +149,10 @@ export default function UploadAssignment() {
   };
 
   const handleRemoveFile = async (fileId) => {
+    if (selectedAssignment?.submission_open === false) {
+      setError(DEADLINE_CLOSED_MESSAGE);
+      return;
+    }
     if (!window.confirm('Remove this uploaded file?')) return;
     setError('');
     try {
@@ -160,6 +167,7 @@ export default function UploadAssignment() {
 
   const selectedAssignment = submission?.assignment || assignments.find(a => String(a.assignment_id) === String(selAssignment));
   const groups = buildGroups(submission);
+  const submissionOpen = selectedAssignment?.submission_open !== false;
 
   return (
     <>
@@ -201,6 +209,10 @@ export default function UploadAssignment() {
               <span>Due</span>
               <strong>{formatDateTime(selectedAssignment.deadline_date, selectedAssignment.deadline_time)}</strong>
             </div>
+            <div>
+              <span>Submission</span>
+              <strong>{submissionOpen ? 'Open' : 'Closed'}</strong>
+            </div>
             {selectedAssignment.has_guideline && (
               <button className="btn btn-info btn-sm" onClick={handleOpenGuideline}>
                 View Guideline
@@ -213,6 +225,12 @@ export default function UploadAssignment() {
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : submission ? (
           <>
+            {!submissionOpen && (
+              <div className="alert alert-error">
+                {DEADLINE_CLOSED_MESSAGE}
+              </div>
+            )}
+
             <div className={`alert ${submission.portfolio.is_complete ? 'alert-success' : 'alert-warning'}`}>
               Upload status: {submission.portfolio.is_complete ? 'Complete' : 'Incomplete'}
               {!submission.portfolio.is_complete && submission.portfolio.missing_mandatory_documents?.length > 0 && (
@@ -252,7 +270,13 @@ export default function UploadAssignment() {
                             <span>{file.original_name}</span>
                             <div>
                               <button className="btn btn-info btn-sm" onClick={() => handleOpenFile(file.file_id)}>View</button>
-                              <button className="btn btn-danger btn-sm" onClick={() => handleRemoveFile(file.file_id)}>Remove</button>
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleRemoveFile(file.file_id)}
+                                disabled={!submissionOpen}
+                              >
+                                Remove
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -268,6 +292,7 @@ export default function UploadAssignment() {
                         multiple
                         accept={accept}
                         onChange={e => handleFilesChange(requirementId, e.target.files)}
+                        disabled={!submissionOpen}
                       />
                       {selectedFiles[selectedKey]?.length > 0 && (
                         <span>{selectedFiles[selectedKey].length} file(s) selected</span>
@@ -279,7 +304,7 @@ export default function UploadAssignment() {
             </div>
 
             <div className="action-row">
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading}>
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading || !submissionOpen}>
                 {uploading ? 'Saving...' : 'SAVE SUBMISSION'}
               </button>
             </div>
