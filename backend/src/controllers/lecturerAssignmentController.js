@@ -12,6 +12,31 @@ const unassignSchema = z.object({
   portfolio_ids: z.array(z.coerce.number().int().positive()).min(1),
 });
 
+const distributeSchema = z.object({
+  assignment_id: z.coerce.number().int().positive(),
+  mode: z.enum(['random', 'equal']),
+  lecturer_user_ids: z.array(z.coerce.number().int().positive()).min(1),
+  portfolio_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
+  use_all_filtered: z.coerce.boolean().optional().default(false),
+  include_assigned: z.coerce.boolean().optional().default(false),
+}).superRefine((data, ctx) => {
+  if (data.mode === 'equal' && data.lecturer_user_ids.length < 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['lecturer_user_ids'],
+      message: 'Equal distribution requires at least two lecturers.',
+    });
+  }
+
+  if (!data.use_all_filtered && data.portfolio_ids.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['portfolio_ids'],
+      message: 'Select at least one student submission or use all unassigned students.',
+    });
+  }
+});
+
 function naturalStudentCompare(a, b) {
   const left = String(a.student_no || '');
   const right = String(b.student_no || '');
@@ -53,6 +78,43 @@ async function ensureLecturer(userId) {
   )[0];
 }
 
+async function ensureAssignment(assignmentId) {
+  return (
+    await query(
+      'SELECT assignment_id FROM assignments WHERE assignment_id=? LIMIT 1',
+      [assignmentId]
+    )
+  )[0];
+}
+
+async function ensureLecturers(userIds) {
+  const uniqueIds = [...new Set(userIds.map(Number))];
+  const placeholders = uniqueIds.map(() => '?').join(',');
+  const rows = await query(
+    `SELECT u.user_id, u.email, u.display_name,
+            t.teacher_id, t.full_name, t.department
+     FROM users u
+     LEFT JOIN teachers t ON t.user_id = u.user_id
+     WHERE u.role='teacher' AND u.user_id IN (${placeholders})`,
+    uniqueIds
+  );
+
+  const found = new Set(rows.map((row) => Number(row.user_id)));
+  return {
+    uniqueIds,
+    lecturers: rows.map((row) => ({
+      user_id: row.user_id,
+      email: row.email,
+      display_name: row.display_name,
+      teacher_id: row.teacher_id,
+      full_name: row.full_name,
+      department: row.department,
+      label: row.full_name || row.display_name || row.email,
+    })),
+    missing: uniqueIds.filter((id) => !found.has(id)),
+  };
+}
+
 async function ensureAssignmentPortfolios(assignmentId, portfolioIds) {
   const uniqueIds = [...new Set(portfolioIds.map(Number))];
   const placeholders = uniqueIds.map(() => '?').join(',');
@@ -65,6 +127,99 @@ async function ensureAssignmentPortfolios(assignmentId, portfolioIds) {
   const found = new Set(rows.map((row) => Number(row.portfolio_id)));
   const missing = uniqueIds.filter((id) => !found.has(id));
   return { uniqueIds, missing };
+}
+
+async function loadDistributionPortfolios({ assignmentId, portfolioIds, useAllFiltered }) {
+  const params = [assignmentId];
+  let idClause = '';
+
+  if (!useAllFiltered) {
+    const uniqueIds = [...new Set(portfolioIds.map(Number))];
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    idClause = `AND p.portfolio_id IN (${placeholders})`;
+    params.push(...uniqueIds);
+  }
+
+  return query(
+    `SELECT p.portfolio_id, p.student_no, p.upload_date, lpa.lecturer_user_id
+     FROM portfolios p
+     LEFT JOIN lecturer_portfolio_assignments lpa ON lpa.portfolio_id = p.portfolio_id
+     WHERE p.assignment_id=?
+       ${idClause}
+     ORDER BY p.student_no ASC, p.portfolio_id ASC`,
+    params
+  );
+}
+
+function shuffleRows(rows) {
+  const next = [...rows];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+function distributeRandom(rows, lecturers) {
+  const shuffled = shuffleRows(rows);
+  return shuffled.map((row, index) => ({
+    portfolio: row,
+    lecturer: lecturers[index % lecturers.length],
+  }));
+}
+
+function distributeEqual(rows, lecturers) {
+  const sortedRows = [...rows].sort(naturalStudentCompare);
+  const assignments = [];
+  const base = Math.floor(sortedRows.length / lecturers.length);
+  const remainder = sortedRows.length % lecturers.length;
+  let cursor = 0;
+
+  lecturers.forEach((lecturer, index) => {
+    const count = base + (index < remainder ? 1 : 0);
+    const chunk = sortedRows.slice(cursor, cursor + count);
+    chunk.forEach((row) => assignments.push({ portfolio: row, lecturer }));
+    cursor += count;
+  });
+
+  return assignments;
+}
+
+function buildDistributionGroups(assignments, lecturers) {
+  const map = new Map();
+  lecturers.forEach((lecturer) => {
+    map.set(Number(lecturer.user_id), {
+      lecturer,
+      assigned_count: 0,
+      submissions: [],
+    });
+  });
+
+  assignments.forEach(({ portfolio, lecturer }) => {
+    const group = map.get(Number(lecturer.user_id));
+    if (!group) return;
+    group.assigned_count += 1;
+    group.submissions.push({
+      portfolio_id: portfolio.portfolio_id,
+      student_no: portfolio.student_no,
+    });
+  });
+
+  return [...map.values()].map((group) => ({
+    ...group,
+    submissions: group.submissions.sort(naturalStudentCompare),
+  }));
+}
+
+async function countUnassignedForAssignment(assignmentId) {
+  const rows = await query(
+    `SELECT COUNT(*) AS total
+     FROM portfolios p
+     LEFT JOIN lecturer_portfolio_assignments lpa ON lpa.portfolio_id = p.portfolio_id
+     WHERE p.assignment_id=? AND lpa.portfolio_id IS NULL`,
+    [assignmentId]
+  );
+  return Number(rows[0]?.total || 0);
 }
 
 export async function listLecturers(req, res) {
@@ -216,6 +371,84 @@ export async function assignPortfolios(req, res) {
   }
 }
 
+export async function distributePortfolios(req, res) {
+  const conn = await pool.getConnection();
+  try {
+    const data = distributeSchema.parse(req.body);
+    const assignment = await ensureAssignment(data.assignment_id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const lecturerData = await ensureLecturers(data.lecturer_user_ids);
+    if (lecturerData.missing.length) {
+      return res.status(400).json({ error: `Invalid lecturer(s): ${lecturerData.missing.join(', ')}` });
+    }
+
+    if (!data.use_all_filtered) {
+      const { missing } = await ensureAssignmentPortfolios(data.assignment_id, data.portfolio_ids);
+      if (missing.length) {
+        return res.status(400).json({ error: `Invalid portfolio(s) for this assignment: ${missing.join(', ')}` });
+      }
+    }
+
+    const requestedPortfolios = await loadDistributionPortfolios({
+      assignmentId: data.assignment_id,
+      portfolioIds: data.portfolio_ids,
+      useAllFiltered: data.use_all_filtered,
+    });
+
+    const targetPortfolios = data.include_assigned
+      ? requestedPortfolios
+      : requestedPortfolios.filter((row) => !row.lecturer_user_id);
+    const skippedAssignedCount = requestedPortfolios.length - targetPortfolios.length;
+
+    const plannedAssignments = data.mode === 'random'
+      ? distributeRandom(targetPortfolios, lecturerData.lecturers)
+      : distributeEqual(targetPortfolios, lecturerData.lecturers);
+
+    await conn.beginTransaction();
+    for (const item of plannedAssignments) {
+      await conn.execute(
+        `INSERT INTO lecturer_portfolio_assignments
+          (assignment_id, portfolio_id, lecturer_user_id, assigned_by)
+         VALUES (?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+          assignment_id=VALUES(assignment_id),
+          lecturer_user_id=VALUES(lecturer_user_id),
+          assigned_by=VALUES(assigned_by),
+          assigned_at=CURRENT_TIMESTAMP`,
+        [
+          data.assignment_id,
+          item.portfolio.portfolio_id,
+          item.lecturer.user_id,
+          req.user.user_id,
+        ]
+      );
+    }
+    await conn.commit();
+
+    const unassignedRemaining = await countUnassignedForAssignment(data.assignment_id);
+
+    res.json({
+      ok: true,
+      mode: data.mode,
+      assignment_id: data.assignment_id,
+      requested_count: requestedPortfolios.length,
+      assigned_count: plannedAssignments.length,
+      skipped_count: skippedAssignedCount,
+      skipped_assigned_count: skippedAssignedCount,
+      unassigned_remaining: unassignedRemaining,
+      groups: buildDistributionGroups(plannedAssignments, lecturerData.lecturers),
+    });
+  } catch (e) {
+    await conn.rollback().catch(() => {});
+    if (e?.issues) return res.status(400).json({ error: 'Validation error', details: e.issues });
+    console.error(e);
+    res.status(500).json({ error: 'Failed to distribute portfolios' });
+  } finally {
+    conn.release();
+  }
+}
+
 export async function unassignPortfolios(req, res) {
   try {
     const data = unassignSchema.parse(req.body);
@@ -282,10 +515,12 @@ export async function getAssignmentGroups(req, res) {
 
     const groups = [...groupMap.values()].map((group) => ({
       ...group,
+      assigned_count: group.submissions.length,
       submissions: group.submissions.sort(naturalStudentCompare),
     }));
 
-    res.json({ assignment_id: assignmentId, groups });
+    const unassigned_remaining = await countUnassignedForAssignment(assignmentId);
+    res.json({ assignment_id: assignmentId, groups, unassigned_remaining });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to load assignment groups' });

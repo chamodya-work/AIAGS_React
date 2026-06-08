@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { pool, query } from '../db.js';
+import { getDeadlineInfo } from '../services/deadlineService.js';
+import { sendAssignmentCreatedNotifications } from '../services/assignmentNotificationService.js';
 
 const REQUIRED_DOC_TYPES = new Set([
   'pdf',
@@ -206,6 +208,7 @@ function safeAssignment(row) {
   return {
     ...safe,
     has_guideline: Boolean(row.guideline_file_path || row.has_guideline),
+    ...getDeadlineInfo(row),
   };
 }
 
@@ -344,6 +347,10 @@ export async function createAssignment(req, res) {
     await conn.commit();
     const rows = await query('SELECT * FROM assignments WHERE assignment_id=?', [assignmentId]);
     const savedRequiredDocuments = await getRequiredDocuments(assignmentId);
+
+    sendAssignmentCreatedNotifications(assignmentId).catch((error) => {
+      console.warn(`Assignment ${assignmentId} notification email dispatch failed: ${error.message}`);
+    });
 
     res.status(201).json({
       assignment: {

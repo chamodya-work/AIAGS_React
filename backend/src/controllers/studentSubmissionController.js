@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { pool, query } from '../db.js';
 import { ensurePortfolioAccess } from '../services/lecturerAccess.js';
+import { assertSubmissionOpen, getDeadlineInfo } from '../services/deadlineService.js';
 
 const ALLOWED_EXTENSIONS_BY_TYPE = {
   pdf: ['.pdf'],
@@ -58,6 +59,7 @@ function safeAssignment(row) {
     guideline_file_mime: row.guideline_file_mime || null,
     guideline_file_size: row.guideline_file_size || null,
     has_guideline: Boolean(row.guideline_file_path),
+    ...getDeadlineInfo(row),
   };
 }
 
@@ -405,6 +407,7 @@ export async function saveStudentSubmission(req, res) {
 
     const files = req.files || [];
     const { student, assignment } = await getStudentAndAssignment(req, assignmentId);
+    assertSubmissionOpen(assignment);
     const requirements = await getRequiredDocuments(assignmentId);
     const existingPortfolio = await getLatestPortfolio(student, assignmentId);
     const existingFiles = await getActiveFiles(student, assignmentId);
@@ -494,6 +497,9 @@ export async function removeStudentSubmissionFile(req, res) {
       )
     )[0];
     if (!file) throw notFound('Submission file not found');
+
+    const { assignment } = await getStudentAndAssignment(req, file.assignment_id);
+    assertSubmissionOpen(assignment);
 
     conn = await pool.getConnection();
     await conn.beginTransaction();

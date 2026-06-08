@@ -1,4 +1,5 @@
 import { query } from "../db.js";
+import { getDeadlineInfo } from "../services/deadlineService.js";
 
 function toDateOnly(value) {
   if (!value) return null;
@@ -7,21 +8,11 @@ function toDateOnly(value) {
   return d.toISOString().slice(0, 10);
 }
 
-function computeStatus(deadlineDate, deadlineTime, uploadedAt) {
-  if (uploadedAt) return "SUBMITTED";
-  if (!deadlineDate) return "PENDING";
-
-  const now = new Date();
-  const due = deadlineTime
-    ? new Date(`${deadlineDate}T${String(deadlineTime).slice(0, 8)}`)
-    : new Date(deadlineDate);
-
-  if (!deadlineTime) {
-    now.setHours(0, 0, 0, 0);
-    due.setHours(0, 0, 0, 0);
+function computeStatus(deadlineInfo, submissionSummary) {
+  if (submissionSummary.active_files > 0) {
+    return submissionSummary.is_complete ? "SUBMITTED" : "MISSING_REQUIRED";
   }
-
-  return due < now ? "OVERDUE" : "PENDING";
+  return deadlineInfo.submission_open ? "OPEN" : "CLOSED";
 }
 
 async function getSubmissionSummary(student, assignmentId) {
@@ -130,10 +121,8 @@ export async function getMyDashboard(req, res) {
       const deadline = toDateOnly(a.deadline_date);
       const uploadDate = a.upload_date ? new Date(a.upload_date).toISOString() : null;
       const submissionSummary = await getSubmissionSummary(student, a.assignment_id);
-      const baseStatus = computeStatus(deadline, a.deadline_time, submissionSummary.active_files > 0 ? uploadDate : null);
-      const status = submissionSummary.active_files > 0
-        ? (submissionSummary.is_complete ? "SUBMITTED" : "INCOMPLETE")
-        : baseStatus;
+      const deadlineInfo = getDeadlineInfo(a);
+      const status = computeStatus(deadlineInfo, submissionSummary);
       return {
         assignment_id: a.assignment_id,
         assignment_name: a.assignment_name,
@@ -152,19 +141,21 @@ export async function getMyDashboard(req, res) {
         missing_mandatory_count: submissionSummary.missing_mandatory_count,
         upload_date: uploadDate,
         status,
+        deadline_status: deadlineInfo.deadline_status,
+        submission_open: deadlineInfo.submission_open,
+        deadline_at: deadlineInfo.deadline_at,
       };
     }));
 
     const summary = normalized.reduce(
       (acc, row) => {
         if (row.status === "SUBMITTED") acc.submitted += 1;
-        if (row.status === "INCOMPLETE") acc.incomplete += 1;
-        if (row.status === "PENDING") acc.pending += 1;
-        if (row.status === "OVERDUE") acc.overdue += 1;
+        if (row.status === "MISSING_REQUIRED") acc.incomplete += 1;
+        if (row.status === "OPEN") acc.pending += 1;
+        if (row.status === "CLOSED") acc.overdue += 1;
 
-        if (row.status !== "SUBMITTED" && row.deadline_date) {
-          const due = new Date(row.deadline_date);
-          due.setHours(0, 0, 0, 0);
+        if (row.status !== "SUBMITTED" && row.deadline_at) {
+          const due = new Date(row.deadline_at);
           if (due >= today && due <= next7) acc.upcoming_7_days += 1;
         }
         return acc;
