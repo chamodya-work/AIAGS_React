@@ -11,8 +11,10 @@ import portfolioRoutes from './routes/portfolios.js';
 import gradingRoutes from './routes/grading.js';
 import lecturerAssignmentRoutes from './routes/lecturerAssignments.js';
 import manualGradingRoutes from './routes/manualGrading.js';
+import notificationRoutes from './routes/notifications.js';
 import metaRoutes from "./routes/metaRoutes.js";
 import studentRoutes from "./routes/students.js";
+import { startNotificationScheduler } from './services/notificationScheduler.js';
 
 dotenv.config();
 
@@ -63,6 +65,7 @@ app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/grading', gradingRoutes);
 app.use('/api/lecturer-assignments', lecturerAssignmentRoutes);
 app.use('/api/manual-grading', manualGradingRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
 
 // Serve React frontend (production build)
@@ -83,4 +86,5 @@ app.get('*', (req, res) => {
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => {
   console.log(`AIGS backend running on http://localhost:${port}`);
+  startNotificationScheduler();
 });
