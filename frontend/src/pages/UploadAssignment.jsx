@@ -36,6 +36,7 @@ function buildGroups(submission) {
         document_name: 'Assignment Submission',
         allowed_file_type: 'pdf_or_docx',
         is_mandatory: true,
+        is_ai_gradable: false,
       },
       files: [],
     },
@@ -252,9 +253,16 @@ export default function UploadAssignment() {
                         <strong>{group.requirement.document_name}</strong>
                         <span>Allowed: {typeLabel(group.requirement.allowed_file_type)}</span>
                       </div>
-                      <span className={`badge ${group.requirement.is_mandatory ? 'badge-danger' : 'badge-info'}`}>
-                        {group.requirement.is_mandatory ? 'Mandatory' : 'Optional'}
-                      </span>
+                      <div className="submission-badge-row">
+                        {group.requirement.is_ai_gradable && (
+                          // <span className="badge badge-success">Main Answer for AI Grading</span>
+                          <span className="badge badge-success">Main Answer Sheet For Grading</span>
+                          
+                        )}
+                        <span className={`badge ${group.requirement.is_mandatory ? 'badge-danger' : 'badge-info'}`}>
+                          {group.requirement.is_mandatory ? 'Mandatory' : 'Optional'}
+                        </span>
+                      </div>
                     </div>
 
                     {!supportsAi && (

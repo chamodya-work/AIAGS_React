@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS assignment_required_documents (
   document_name VARCHAR(255) NOT NULL,
   allowed_file_type VARCHAR(50) NOT NULL,
   is_mandatory TINYINT(1) DEFAULT 1,
+  is_ai_gradable TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_required_docs_assignment (assignment_id),

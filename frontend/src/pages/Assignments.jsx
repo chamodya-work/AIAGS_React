@@ -26,10 +26,11 @@ const initialForm = {
   deadline_time: '',
 };
 
-const emptyRequiredDoc = () => ({
+const emptyRequiredDoc = (isAiGradable = false) => ({
   document_name: '',
   allowed_file_type: 'pdf_or_docx',
   is_mandatory: true,
+  is_ai_gradable: isAiGradable,
 });
 
 function formatDateTime(dateValue, timeValue) {
@@ -57,6 +58,7 @@ function buildAssignmentFormData(form, guidelineFile, rubricFile, requiredDocs) 
       document_name: row.document_name.trim(),
       allowed_file_type: row.allowed_file_type,
       is_mandatory: Boolean(row.is_mandatory),
+      is_ai_gradable: Boolean(row.is_ai_gradable),
     }));
 
   fd.append('required_documents', JSON.stringify(usedRequiredDocs));
@@ -77,7 +79,13 @@ export default function AssignmentsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(initialForm);
-  const [requiredDocs, setRequiredDocs] = useState([emptyRequiredDoc()]);
+  const [requiredDocs, setRequiredDocs] = useState([emptyRequiredDoc(true)]);
+  const [listFilters, setListFilters] = useState({
+    course_name: '',
+    department: '',
+    batch: '',
+    search: '',
+  });
   const [guidelineFile, setGuidelineFile] = useState(null);
   const [rubricFile, setRubricFile] = useState(null);
   const guidelineRef = useRef(null);
@@ -114,20 +122,32 @@ export default function AssignmentsPage() {
   };
 
   const addRequiredDocRow = () => {
-    setRequiredDocs((rows) => [...rows, emptyRequiredDoc()]);
+    setRequiredDocs((rows) => [...rows, emptyRequiredDoc(false)]);
   };
 
   const removeRequiredDocRow = (index) => {
     setRequiredDocs((rows) => {
-      const next = rows.filter((_, rowIndex) => rowIndex !== index);
-      return next.length ? next : [emptyRequiredDoc()];
+      const removedWasAiGradable = Boolean(rows[index]?.is_ai_gradable);
+      let next = rows.filter((_, rowIndex) => rowIndex !== index);
+      if (!next.length) next = [emptyRequiredDoc(true)];
+      if (removedWasAiGradable && !next.some((row) => row.is_ai_gradable)) {
+        next = next.map((row, rowIndex) => ({ ...row, is_ai_gradable: rowIndex === 0 }));
+      }
+      return next;
     });
+  };
+
+  const markAiGradableDoc = (index) => {
+    setRequiredDocs((rows) => rows.map((row, rowIndex) => ({
+      ...row,
+      is_ai_gradable: rowIndex === index,
+    })));
   };
 
   const resetForm = () => {
     setForm(initialForm);
     setBatches([]);
-    setRequiredDocs([emptyRequiredDoc()]);
+    setRequiredDocs([emptyRequiredDoc(true)]);
     setGuidelineFile(null);
     setRubricFile(null);
     if (guidelineRef.current) guidelineRef.current.value = '';
@@ -137,6 +157,12 @@ export default function AssignmentsPage() {
   const handleSubmit = async () => {
     if (!form.course_name || !form.batch || !form.assignment_name || !form.deadline_date) {
       setError('Course, Batch, Assignment name and Due Date are required.');
+      return;
+    }
+
+    const usedRequiredDocs = requiredDocs.filter((row) => row.document_name.trim());
+    if (usedRequiredDocs.length && !usedRequiredDocs.some((row) => row.is_ai_gradable)) {
+      setError('Select one required document to use for AI grading.');
       return;
     }
 
@@ -173,6 +199,27 @@ export default function AssignmentsPage() {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const filteredAssignments = list.filter((assignment) => {
+    const matchesCourse = !listFilters.course_name || assignment.course_name === listFilters.course_name;
+    const matchesDepartment = !listFilters.department
+      || String(assignment.department || '').toLowerCase() === listFilters.department.toLowerCase();
+    const matchesBatch = !listFilters.batch || assignment.batch === listFilters.batch;
+    const matchesSearch = !listFilters.search
+      || String(assignment.assignment_name || '').toLowerCase().includes(listFilters.search.toLowerCase());
+    return matchesCourse && matchesDepartment && matchesBatch && matchesSearch;
+  });
+
+  const filterBatches = [...new Set(list
+    .filter((assignment) => !listFilters.course_name || assignment.course_name === listFilters.course_name)
+    .filter((assignment) => !listFilters.department || String(assignment.department || '').toLowerCase() === listFilters.department.toLowerCase())
+    .map((assignment) => assignment.batch)
+    .filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
+  const clearListFilters = () => {
+    setListFilters({ course_name: '', department: '', batch: '', search: '' });
   };
 
   return (
@@ -272,13 +319,18 @@ export default function AssignmentsPage() {
                 Add Row
               </button>
             </div>
+            {/* <div className="required-docs-help">
+              Mandatory means the student must upload this document. Main Answer means this document will be used for AI grading.
+              Select one Main Answer Document; AI grading will use only files uploaded under that document category.
+            </div> */}
             <div className="table-container compact-table-container">
               <table className="data-table required-docs-table">
                 <thead>
                   <tr>
-                    <th>Required Document Name</th>
+                    <th>Document Name</th>
                     <th>Allowed File Type</th>
-                    <th>Mandatory</th>
+                    <th>AI Grading</th>
+                    <th>STATUS</th>
                     <th>Remove</th>
                   </tr>
                 </thead>
@@ -303,6 +355,16 @@ export default function AssignmentsPage() {
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="radio"
+                          name="ai_gradable_required_document"
+                          checked={Boolean(row.is_ai_gradable)}
+                          onChange={() => markAiGradableDoc(index)}
+                          disabled={!row.document_name.trim()}
+                          title="Use this required document category as the main answer sheet for AI grading"
+                        />
                       </td>
                       <td>
                         <select
@@ -335,6 +397,53 @@ export default function AssignmentsPage() {
       </div>
 
       <div className="content-card assignment-list-card">
+        <div className="assignment-list-filters">
+          <div className="assignment-field">
+            <label>Course</label>
+            <select
+              className="form-select"
+              value={listFilters.course_name}
+              onChange={e => setListFilters(f => ({ ...f, course_name: e.target.value, batch: '' }))}
+            >
+              <option value="">All Courses</option>
+              {courses.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="assignment-field">
+            <label>Department</label>
+            <select
+              className="form-select"
+              value={listFilters.department}
+              onChange={e => setListFilters(f => ({ ...f, department: e.target.value, batch: '' }))}
+            >
+              <option value="">All Departments</option>
+              {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div className="assignment-field">
+            <label>Batch</label>
+            <select
+              className="form-select"
+              value={listFilters.batch}
+              onChange={e => setListFilters(f => ({ ...f, batch: e.target.value }))}
+            >
+              <option value="">All Batches</option>
+              {filterBatches.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          <div className="assignment-field assignment-filter-search">
+            <label>Search</label>
+            <input
+              className="form-input"
+              placeholder="Assignment name"
+              value={listFilters.search}
+              onChange={e => setListFilters(f => ({ ...f, search: e.target.value }))}
+            />
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={clearListFilters}>
+            Clear Filters
+          </button>
+        </div>
         {loading ? (
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
@@ -353,13 +462,13 @@ export default function AssignmentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.length === 0 ? (
+                {filteredAssignments.length === 0 ? (
                   <tr>
                     <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
-                      No assignments yet.
+                      No assignments found.
                     </td>
                   </tr>
-                ) : list.map(a => (
+                ) : filteredAssignments.map(a => (
                   <tr key={a.assignment_id}>
                     <td>{a.batch}</td>
                     <td>{a.course_name}</td>

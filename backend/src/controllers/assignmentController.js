@@ -93,6 +93,11 @@ function normalizeBoolean(value) {
   return !['false', '0', 'optional', 'no'].includes(valueText);
 }
 
+function normalizeOptionalBoolean(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  return normalizeBoolean(value);
+}
+
 function parseRequiredDocuments(input) {
   if (!input) return [];
 
@@ -109,11 +114,12 @@ function parseRequiredDocuments(input) {
     throw badRequest('Required document table must be an array.');
   }
 
-  return rows
+  const documents = rows
     .map((row) => ({
       document_name: text(row?.document_name),
       allowed_file_type: normalizeRequiredDocType(row?.allowed_file_type),
       is_mandatory: normalizeBoolean(row?.is_mandatory),
+      is_ai_gradable: normalizeOptionalBoolean(row?.is_ai_gradable, false),
     }))
     .filter((row) => row.document_name)
     .map((row) => {
@@ -121,7 +127,19 @@ function parseRequiredDocuments(input) {
         throw badRequest('Required document name must be 255 characters or fewer.');
       }
       return row;
+    })
+    .map((row, index, allRows) => {
+      if (row.is_ai_gradable && allRows.findIndex((item) => item.is_ai_gradable) !== index) {
+        throw badRequest('Only one required document can be marked for AI grading.');
+      }
+      return row;
     });
+
+  if (documents.length && !documents.some((row) => row.is_ai_gradable)) {
+    throw badRequest('Please select one Main Answer Document for AI grading.');
+  }
+
+  return documents;
 }
 
 function parseCreatePayload(body) {
@@ -214,7 +232,8 @@ function safeAssignment(row) {
 
 async function getRequiredDocuments(assignmentId) {
   return query(
-    `SELECT id, assignment_id, document_name, allowed_file_type, is_mandatory, created_at, updated_at
+    `SELECT id, assignment_id, document_name, allowed_file_type, is_mandatory,
+            is_ai_gradable, created_at, updated_at
      FROM assignment_required_documents
      WHERE assignment_id=?
      ORDER BY id ASC`,
@@ -243,7 +262,7 @@ function matchesStudentProfile(assignment, student) {
 
 export async function listAssignments(req, res) {
   try {
-    const { course_name, batch, department } = req.query;
+    const { course_name, batch, department, search } = req.query;
 
     let sql = `
       SELECT assignment_id, assignment_name, batch, course_name, department,
@@ -258,6 +277,11 @@ export async function listAssignments(req, res) {
     if (course_name) { sql += ' AND course_name = ?'; params.push(course_name); }
     if (department) { sql += ' AND LOWER(department) = LOWER(?)'; params.push(department); }
     if (batch) { sql += ' AND batch = ?'; params.push(batch); }
+    const searchText = text(search);
+    if (searchText) {
+      sql += ' AND assignment_name LIKE ?';
+      params.push(`%${searchText}%`);
+    }
 
     if (req.user?.role === 'student') {
       const student = await getStudentProfile(req.user.user_id);
@@ -320,9 +344,15 @@ export async function createAssignment(req, res) {
     for (const doc of requiredDocuments) {
       await conn.execute(
         `INSERT INTO assignment_required_documents
-          (assignment_id, document_name, allowed_file_type, is_mandatory)
-         VALUES (?,?,?,?)`,
-        [assignmentId, doc.document_name, doc.allowed_file_type, doc.is_mandatory ? 1 : 0]
+          (assignment_id, document_name, allowed_file_type, is_mandatory, is_ai_gradable)
+         VALUES (?,?,?,?,?)`,
+        [
+          assignmentId,
+          doc.document_name,
+          doc.allowed_file_type,
+          doc.is_mandatory ? 1 : 0,
+          doc.is_ai_gradable ? 1 : 0,
+        ]
       );
     }
 

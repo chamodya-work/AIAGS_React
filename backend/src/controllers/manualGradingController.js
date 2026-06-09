@@ -58,6 +58,10 @@ function manualRow(row, req) {
     upload_date: row.upload_date,
     portfolio_link: row.portfolio_link,
     primary_file_id: row.primary_file_id,
+    primary_file_name: row.primary_file_name,
+    main_answer_document_name: row.main_answer_document_name,
+    main_answer_uploaded_files: row.main_answer_uploaded_files,
+    ai_grading_file_names: row.ai_grading_file_names,
     ai_status: row.ai_status || 'pending',
     ai_grade: row.ai_grade,
     ai_grading_error: row.ai_grading_error,
@@ -119,14 +123,86 @@ export async function listManualResultsByAssignment(req, res) {
               (
                 SELECT pf.file_id
                 FROM portfolio_files pf
+                LEFT JOIN assignment_required_documents ard_primary ON ard_primary.id = pf.required_document_id
                 WHERE pf.portfolio_id = p.portfolio_id
                   AND pf.removed_at IS NULL
+                  AND (
+                    NOT EXISTS (
+                      SELECT 1
+                      FROM assignment_required_documents ard_main
+                      WHERE ard_main.assignment_id = p.assignment_id
+                        AND ard_main.is_ai_gradable = 1
+                    )
+                    OR pf.required_document_id IN (
+                      SELECT ard_main.id
+                      FROM assignment_required_documents ard_main
+                      WHERE ard_main.assignment_id = p.assignment_id
+                        AND ard_main.is_ai_gradable = 1
+                    )
+                  )
                 ORDER BY CASE
-                  WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
-                  ELSE 1
+                  WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1
+                       AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx') THEN 0
+                  WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1 THEN 1
+                  WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 2
+                  ELSE 3
                 END, pf.uploaded_at DESC, pf.file_id DESC
                 LIMIT 1
               ) AS primary_file_id,
+              (
+                SELECT pf.original_name
+                FROM portfolio_files pf
+                LEFT JOIN assignment_required_documents ard_primary ON ard_primary.id = pf.required_document_id
+                WHERE pf.portfolio_id = p.portfolio_id
+                  AND pf.removed_at IS NULL
+                  AND (
+                    NOT EXISTS (
+                      SELECT 1
+                      FROM assignment_required_documents ard_main
+                      WHERE ard_main.assignment_id = p.assignment_id
+                        AND ard_main.is_ai_gradable = 1
+                    )
+                    OR pf.required_document_id IN (
+                      SELECT ard_main.id
+                      FROM assignment_required_documents ard_main
+                      WHERE ard_main.assignment_id = p.assignment_id
+                        AND ard_main.is_ai_gradable = 1
+                    )
+                  )
+                ORDER BY CASE
+                  WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1
+                       AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx') THEN 0
+                  WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1 THEN 1
+                  WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 2
+                  ELSE 3
+                END, pf.uploaded_at DESC, pf.file_id DESC
+                LIMIT 1
+              ) AS primary_file_name,
+              (
+                SELECT ard.document_name
+                FROM assignment_required_documents ard
+                WHERE ard.assignment_id = p.assignment_id
+                  AND ard.is_ai_gradable = 1
+                ORDER BY ard.id ASC
+                LIMIT 1
+              ) AS main_answer_document_name,
+              (
+                SELECT GROUP_CONCAT(pf.original_name ORDER BY pf.uploaded_at DESC, pf.file_id DESC SEPARATOR ', ')
+                FROM portfolio_files pf
+                JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+                WHERE pf.portfolio_id = p.portfolio_id
+                  AND pf.removed_at IS NULL
+                  AND ard.is_ai_gradable = 1
+              ) AS main_answer_uploaded_files,
+              (
+                SELECT GROUP_CONCAT(pf.original_name ORDER BY pf.uploaded_at DESC, pf.file_id DESC SEPARATOR ', ')
+                FROM portfolio_files pf
+                JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+                WHERE pf.portfolio_id = p.portfolio_id
+                  AND pf.removed_at IS NULL
+                  AND ard.is_ai_gradable = 1
+                  AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx')
+              ) AS ai_grading_file_names,
               ag.ai_status, ag.ai_grade, ag.ai_grading_error, ag.ai_model,
               fg.final_grade, fg.manual_score, fg.manual_remark, fg.saved_by,
               fg.saved_by_role, fg.saved_at, fg.status, fg.publish_status,

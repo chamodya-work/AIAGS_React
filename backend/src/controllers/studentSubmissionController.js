@@ -70,6 +70,7 @@ function safeRequirement(row) {
     document_name: row.document_name,
     allowed_file_type: row.allowed_file_type,
     is_mandatory: Boolean(row.is_mandatory),
+    is_ai_gradable: Boolean(row.is_ai_gradable),
   };
 }
 
@@ -82,6 +83,7 @@ function safeFile(row) {
     required_document_name: row.document_name || null,
     allowed_file_type: row.allowed_file_type || null,
     is_mandatory: row.is_mandatory === null || row.is_mandatory === undefined ? null : Boolean(row.is_mandatory),
+    is_ai_gradable: row.is_ai_gradable === null || row.is_ai_gradable === undefined ? false : Boolean(row.is_ai_gradable),
     original_name: row.original_name,
     mime_type: row.mime_type,
     file_size: row.file_size,
@@ -173,7 +175,7 @@ async function getStudentAndAssignment(req, assignmentId) {
 
 async function getRequiredDocuments(assignmentId) {
   const rows = await query(
-    `SELECT id, assignment_id, document_name, allowed_file_type, is_mandatory
+    `SELECT id, assignment_id, document_name, allowed_file_type, is_mandatory, is_ai_gradable
      FROM assignment_required_documents
      WHERE assignment_id=?
      ORDER BY id ASC`,
@@ -208,7 +210,7 @@ async function getActiveFiles(student, assignmentId) {
     `SELECT pf.file_id, pf.portfolio_id, pf.assignment_id, pf.student_no,
             pf.required_document_id, pf.file_path, pf.original_name, pf.mime_type,
             pf.file_size, pf.uploaded_at, ard.document_name, ard.allowed_file_type,
-            ard.is_mandatory
+            ard.is_mandatory, ard.is_ai_gradable
      FROM portfolio_files pf
      LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
      WHERE pf.assignment_id=?
@@ -240,6 +242,7 @@ function groupFiles(requirements, files) {
         document_name: requirements.length === 0 ? 'Assignment Submission' : 'Uncategorized Files',
         allowed_file_type: 'pdf_or_docx',
         is_mandatory: requirements.length === 0,
+        is_ai_gradable: false,
       },
       files: uncategorized,
     });
@@ -312,19 +315,27 @@ function checkMandatoryRequirements(requirements, existingFiles, pendingFiles) {
 
 function chooseRepresentativeFile(files) {
   if (!files.length) return null;
+  const aiGradableSupported = files.find((file) => file.is_ai_gradable && isAiSupportedPath(file.file_path));
+  if (aiGradableSupported) return aiGradableSupported;
+  const aiGradable = files.find((file) => file.is_ai_gradable);
+  if (aiGradable) return aiGradable;
   const aiSupported = files.find((file) => isAiSupportedPath(file.file_path));
   return aiSupported || files[0];
 }
 
 async function refreshPortfolioRepresentative(conn, portfolioId) {
   const [rows] = await conn.execute(
-    `SELECT file_id, file_path
-     FROM portfolio_files
-     WHERE portfolio_id=? AND removed_at IS NULL
+    `SELECT pf.file_id, pf.file_path, COALESCE(ard.is_ai_gradable, 0) AS is_ai_gradable
+     FROM portfolio_files pf
+     LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+     WHERE pf.portfolio_id=? AND pf.removed_at IS NULL
      ORDER BY CASE
-       WHEN LOWER(file_path) LIKE '%.pdf' OR LOWER(file_path) LIKE '%.docx' THEN 0
-       ELSE 1
-     END, uploaded_at DESC, file_id DESC`,
+       WHEN COALESCE(ard.is_ai_gradable, 0) = 1
+            AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx') THEN 0
+       WHEN COALESCE(ard.is_ai_gradable, 0) = 1 THEN 1
+       WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 2
+       ELSE 3
+     END, pf.uploaded_at DESC, pf.file_id DESC`,
     [portfolioId]
   );
 
@@ -425,7 +436,10 @@ export async function saveStudentSubmission(req, res) {
     let portfolio = existingPortfolio;
     if (!portfolio) {
       const representative = chooseRepresentativeFile(
-        pendingFiles.map((pending) => ({ file_path: storedSubmissionPath(pending.file) }))
+        pendingFiles.map((pending) => ({
+          file_path: storedSubmissionPath(pending.file),
+          is_ai_gradable: Boolean(pending.requirement?.is_ai_gradable),
+        }))
       );
       if (!representative) throw badRequest('Choose at least one file to upload.');
 
