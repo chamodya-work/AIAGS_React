@@ -204,15 +204,18 @@ async function getPortfolioForGrading(portfolioId) {
 
 async function getActivePortfolioFiles(portfolioId) {
   const rows = await query(
-    `SELECT pf.file_id, pf.file_path, pf.original_name, pf.mime_type,
-            ard.document_name
+    `SELECT pf.file_id, pf.required_document_id, pf.file_path, pf.original_name, pf.mime_type,
+            ard.document_name, ard.allowed_file_type, COALESCE(ard.is_ai_gradable, 0) AS is_ai_gradable
      FROM portfolio_files pf
      LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
      WHERE pf.portfolio_id=?
        AND pf.removed_at IS NULL
      ORDER BY CASE
-       WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
-       ELSE 1
+       WHEN COALESCE(ard.is_ai_gradable, 0) = 1
+            AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx') THEN 0
+       WHEN COALESCE(ard.is_ai_gradable, 0) = 1 THEN 1
+       WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 2
+       ELSE 3
      END, pf.uploaded_at DESC, pf.file_id DESC`,
     [portfolioId]
   );
@@ -220,9 +223,56 @@ async function getActivePortfolioFiles(portfolioId) {
   return rows
     .map((row) => {
       const absolutePath = resolveUploadPath(row.file_path);
-      return { ...row, absolute_path: absolutePath };
-    })
-    .filter((row) => row.absolute_path && fs.existsSync(row.absolute_path));
+      return { ...row, absolute_path: absolutePath, file_exists: Boolean(absolutePath && fs.existsSync(absolutePath)) };
+    });
+}
+
+async function getAiGradableRequirements(assignmentId) {
+  return query(
+    `SELECT id, document_name
+     FROM assignment_required_documents
+     WHERE assignment_id=? AND is_ai_gradable=1
+     ORDER BY id ASC`,
+    [assignmentId]
+  );
+}
+
+function isSupportedSubmissionFile(file) {
+  return /\.(pdf|docx)$/i.test(file?.file_path || '');
+}
+
+function selectSubmissionFilesForAi(activeFiles, aiGradableRequirements) {
+  const supportedActiveFiles = activeFiles.filter((file) => isSupportedSubmissionFile(file) && file.file_exists);
+
+  if (aiGradableRequirements.length > 0) {
+    const aiGradableIds = new Set(aiGradableRequirements.map((row) => Number(row.id)));
+    const aiGradableFiles = activeFiles.filter((file) => aiGradableIds.has(Number(file.required_document_id)));
+    if (!aiGradableFiles.length) {
+      throw new Error('No Main Answer Document has been uploaded for AI grading.');
+    }
+
+    const supportedAiGradableFiles = aiGradableFiles.filter(isSupportedSubmissionFile);
+    if (!supportedAiGradableFiles.length) {
+      throw new Error('Main Answer Document must be PDF or DOCX for AI grading.');
+    }
+
+    const existingSupportedAiGradableFiles = supportedAiGradableFiles.filter((file) => file.file_exists);
+    if (!existingSupportedAiGradableFiles.length) {
+      throw new Error('Main Answer Document file is missing on disk.');
+    }
+
+    return {
+      files: existingSupportedAiGradableFiles,
+      representativeFile: existingSupportedAiGradableFiles[0],
+      usedFallback: false,
+    };
+  }
+
+  return {
+    files: supportedActiveFiles,
+    representativeFile: supportedActiveFiles[0] || activeFiles[0] || null,
+    usedFallback: true,
+  };
 }
 
 function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, submissionFiles = []) {
@@ -252,7 +302,7 @@ function buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, su
     submission: {
       portfolio_id: portfolio.portfolio_id,
       file_path: portfolioFilePath,
-      portfolio_link: portfolio.portfolio_link,
+      portfolio_link: submissionFiles[0]?.file_path || portfolio.portfolio_link,
       uploaded_at: portfolio.upload_date,
       files: submissionFiles.map((file) => ({
         file_id: file.file_id,
@@ -290,8 +340,11 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
     }
 
     const activeFiles = await getActivePortfolioFiles(portfolioId);
-    const supportedActiveFiles = activeFiles.filter((file) => /\.(pdf|docx)$/i.test(file.file_path || ''));
-    const representativeFile = supportedActiveFiles[0] || activeFiles[0] || null;
+    const aiGradableRequirements = await getAiGradableRequirements(portfolio.assignment_id);
+    const { files: selectedSubmissionFiles, representativeFile } = selectSubmissionFilesForAi(
+      activeFiles,
+      aiGradableRequirements
+    );
     const portfolioFilePath = representativeFile?.absolute_path || resolveUploadPath(portfolio.portfolio_link);
 
     if (!portfolioFilePath || !fs.existsSync(portfolioFilePath)) {
@@ -310,7 +363,7 @@ async function runAiGradingForPortfolio(portfolioId, { forceRegrade = false } = 
     await markProcessing(portfolioId, rubric.rubric_id);
 
     const mlResult = await gradePortfolio(
-      buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, supportedActiveFiles)
+      buildMlPayload(portfolio, rubric, portfolioFilePath, rubricFilePath, selectedSubmissionFiles)
     );
 
     await markGraded(portfolioId, rubric.rubric_id, mlResult);
@@ -391,7 +444,15 @@ export async function getAssignmentGradingStatus(req, res) {
   const access = lecturerPortfolioJoin(req, 'p');
   const rows = await query(
     `SELECT p.portfolio_id, p.student_no, ag.ai_status, ag.ai_grade,
-            ag.ai_grading_error, ag.ai_model, ag.grading_started_at, ag.graded_at
+            ag.ai_grading_error, ag.ai_model, ag.grading_started_at, ag.graded_at,
+            (
+              SELECT ard.document_name
+              FROM assignment_required_documents ard
+              WHERE ard.assignment_id = p.assignment_id
+                AND ard.is_ai_gradable = 1
+              ORDER BY ard.id ASC
+              LIMIT 1
+            ) AS main_answer_document_name
      FROM portfolios p
      ${access.join}
      LEFT JOIN ai_grading ag ON ag.portfolio_id = p.portfolio_id
@@ -590,14 +651,43 @@ export async function listResultsByAssignment(req, res) {
            (
              SELECT pf.file_id
              FROM portfolio_files pf
+             LEFT JOIN assignment_required_documents ard_primary ON ard_primary.id = pf.required_document_id
              WHERE pf.portfolio_id = p.portfolio_id
                AND pf.removed_at IS NULL
              ORDER BY CASE
-               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 0
-               ELSE 1
+               WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1
+                    AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx') THEN 0
+               WHEN COALESCE(ard_primary.is_ai_gradable, 0) = 1 THEN 1
+               WHEN LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx' THEN 2
+               ELSE 3
              END, pf.uploaded_at DESC, pf.file_id DESC
              LIMIT 1
            ) AS primary_file_id,
+           (
+             SELECT ard.document_name
+             FROM assignment_required_documents ard
+             WHERE ard.assignment_id = p.assignment_id
+               AND ard.is_ai_gradable = 1
+             ORDER BY ard.id ASC
+             LIMIT 1
+           ) AS main_answer_document_name,
+           (
+             SELECT GROUP_CONCAT(pf.original_name ORDER BY pf.uploaded_at DESC, pf.file_id DESC SEPARATOR ', ')
+             FROM portfolio_files pf
+             JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+               AND ard.is_ai_gradable = 1
+           ) AS main_answer_uploaded_files,
+           (
+             SELECT GROUP_CONCAT(pf.original_name ORDER BY pf.uploaded_at DESC, pf.file_id DESC SEPARATOR ', ')
+             FROM portfolio_files pf
+             JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+             WHERE pf.portfolio_id = p.portfolio_id
+               AND pf.removed_at IS NULL
+               AND ard.is_ai_gradable = 1
+               AND (LOWER(pf.file_path) LIKE '%.pdf' OR LOWER(pf.file_path) LIKE '%.docx')
+           ) AS ai_grading_file_names,
            ag.rubric_id, ag.ai_grade, ag.ai_review_report, ag.ai_status,
            ag.ai_report_text, ag.ai_grading_error, ag.ai_model,
            ag.grading_started_at, ag.graded_at,
