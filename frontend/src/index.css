@@ -301,6 +301,23 @@ html, body, #root {
   margin: 0 auto;
   padding: 24px;
 }
+.assignment-list-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 12px 18px;
+  align-items: center;
+  border: 1px solid #dde3ea;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: #fbfcfe;
+}
+.assignment-list-filters .btn {
+  justify-self: end;
+}
+.assignment-filter-search {
+  grid-column: span 1;
+}
 .assignment-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -358,13 +375,23 @@ html, body, #root {
   font-size: 16px;
   color: var(--text-dark);
 }
+.required-docs-help {
+  color: #555;
+  font-size: 13px;
+  line-height: 1.4;
+  background: #eef6ff;
+  border: 1px solid #c7def2;
+  border-radius: 6px;
+  padding: 9px 10px;
+  margin-bottom: 12px;
+}
 .compact-table-container {
   margin-top: 0;
   margin-bottom: 0;
   background: white;
 }
 .required-docs-table {
-  min-width: 720px;
+  min-width: 860px;
 }
 .required-docs-table th {
   padding: 10px 12px;
@@ -383,6 +410,12 @@ html, body, #root {
   .assignment-form-card,
   .assignment-list-card {
     max-width: 100%;
+  }
+  .assignment-list-filters {
+    grid-template-columns: 1fr;
+  }
+  .assignment-list-filters .btn {
+    justify-self: stretch;
   }
   .assignment-form-grid {
     grid-template-columns: 1fr;
@@ -440,6 +473,30 @@ html, body, #root {
 .grading-score-cell {
   font-weight: 700;
   color: #2196F3;
+}
+.grading-document-cell {
+  min-width: 180px;
+}
+.grading-document-cell strong,
+.grading-document-cell span {
+  display: block;
+}
+.grading-document-cell strong {
+  color: var(--text-dark);
+  margin-bottom: 3px;
+}
+.grading-document-cell span {
+  color: #667085;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.manual-view-file-name {
+  display: block;
+  max-width: 180px;
+  color: #667085;
+  font-size: 12px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 .grading-score-input {
   width: 86px;
@@ -906,6 +963,13 @@ html, body, #root {
   margin-top: 3px;
   text-transform: capitalize;
 }
+.submission-badge-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
 .submission-file-list {
   display: flex;
   flex-direction: column;
@@ -955,6 +1019,15 @@ html, body, #root {
 }
 .submission-modal {
   max-width: 860px;
+}
+.admin-upload-card {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.admin-student-load-row {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 /* Assign lecturers */

@@ -147,16 +147,30 @@ export const api = {
       if (assignment_id) qs.set('assignment_id', assignment_id);
       return request(`/api/portfolios?${qs.toString()}`);
     },
+    adminSubmission: ({ assignment_id, student_no }) => {
+      const qs = new URLSearchParams();
+      qs.set('assignment_id', assignment_id);
+      if (student_no) qs.set('student_no', student_no);
+      return request(`/api/portfolios/submission?${qs.toString()}`);
+    },
     // Backend requires: student_no (string), assignment_id (number), file (multipart)
-    upload: ({ student_no, assignment_id, file, files }) => {
+    upload: ({ student_no, assignment_id, file, files, filesByRequirement }) => {
       const fd = new FormData();
       fd.append('student_no', student_no);
       fd.append('assignment_id', String(assignment_id));
-      const uploadFiles = files?.length ? files : (file ? [file] : []);
-      uploadFiles.forEach((item) => fd.append(uploadFiles.length > 1 ? 'files' : 'file', item));
+      if (filesByRequirement) {
+        Object.entries(filesByRequirement).forEach(([requirementId, groupFiles]) => {
+          const fieldName = requirementId === 'general' ? 'files_general' : `files_${requirementId}`;
+          (groupFiles || []).forEach((item) => fd.append(fieldName, item));
+        });
+      } else {
+        const uploadFiles = files?.length ? files : (file ? [file] : []);
+        uploadFiles.forEach((item) => fd.append(uploadFiles.length > 1 ? 'files' : 'file', item));
+      }
       return request('/api/portfolios/upload', { method: 'POST', body: fd });
     },
     remove: (id) => request(`/api/portfolios/${id}`, { method: 'DELETE' }),
+    removeFile: (fileId) => request(`/api/portfolios/files/${fileId}`, { method: 'DELETE' }),
     openFile: (fileId) => openAuthorizedFile(`/api/portfolios/files/${fileId}/view`),
   },
 
