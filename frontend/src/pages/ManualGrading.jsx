@@ -42,6 +42,11 @@ function hasLargeAiDifference(aiScore, manualScore) {
   return Number.isFinite(ai) && Number.isFinite(manual) && Math.abs(ai - manual) > 20;
 }
 
+function hasViewablePortfolioFile(row) {
+  if (row.primary_file_id) return true;
+  return !row.main_answer_document_name && Boolean(row.portfolio_link);
+}
+
 export default function ManualGrading() {
   const { user } = useAuth();
   const role = normalizeRole(user?.role);
@@ -149,10 +154,12 @@ export default function ManualGrading() {
     try {
       if (row.primary_file_id) {
         await api.portfolios.openFile(row.primary_file_id);
-      } else if (row.portfolio_link) {
+      } else if (!row.main_answer_document_name && row.portfolio_link) {
         window.open(row.portfolio_link, '_blank', 'noopener,noreferrer');
       } else {
-        setError('No viewable submission file is available for this student.');
+        setError(row.main_answer_document_name
+          ? 'No Main Answer Document file is available for this student.'
+          : 'No viewable submission file is available for this student.');
       }
     } catch (err) {
       setError(err.message);
@@ -338,8 +345,13 @@ export default function ManualGrading() {
                         <td>{row.student_no}</td>
                         <td>{formatDate(row.upload_date)}</td>
                         <td>
-                          {(row.primary_file_id || row.portfolio_link) ? (
-                            <button className="btn btn-info btn-sm" onClick={() => handleOpenPortfolioFile(row)}>View</button>
+                          {hasViewablePortfolioFile(row) ? (
+                            <div className="grading-button-group">
+                              <button className="btn btn-info btn-sm" onClick={() => handleOpenPortfolioFile(row)}>View</button>
+                              {/* <span className="manual-view-file-name">
+                                {row.ai_grading_file_names || row.main_answer_uploaded_files || row.primary_file_name || ''}
+                              </span> */}
+                            </div>
                           ) : '-'}
                         </td>
                         <td>

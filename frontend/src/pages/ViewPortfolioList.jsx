@@ -81,7 +81,7 @@ export default function ViewPortfolioList() {
     return matchStatus && matchSearch;
   });
 
-  const columnCount = isAdmin ? 14 : 13;
+  const columnCount = isAdmin ? 15 : 14;
 
   return (
     <>
@@ -126,6 +126,7 @@ export default function ViewPortfolioList() {
                   <th>Batch</th>
                   <th>Uploaded</th>
                   <th>Submission Status</th>
+                  <th>Main Answer</th>
                   <th>AI Status</th>
                   <th>AI Score</th>
                   <th>Manual/Teacher Score</th>
@@ -152,6 +153,10 @@ export default function ViewPortfolioList() {
                         <span className={`badge ${STATUS_BADGE[p.submission_status] || 'badge-warning'}`}>
                           {p.submission_status || '-'}
                         </span>
+                      </td>
+                      <td className="grading-document-cell">
+                        {p.main_answer_document_name || 'Fallback'}
+                        <span>{p.ai_grading_file_names || p.main_answer_uploaded_files || '-'}</span>
                       </td>
                       <td>
                         <span className={`badge ${STATUS_BADGE[p.ai_status] || 'badge-warning'}`}>

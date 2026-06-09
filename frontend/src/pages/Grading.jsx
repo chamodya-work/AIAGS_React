@@ -10,7 +10,7 @@ const AI_STATUS_BADGE = {
   failed: 'badge-danger',
 };
 
-const TABLE_COLUMN_COUNT = 10;
+const TABLE_COLUMN_COUNT = 11;
 
 export default function GradingPage() {
   const { user } = useAuth();
@@ -210,6 +210,16 @@ export default function GradingPage() {
           <label className="form-label">Rubric:</label>
           <input className="form-input" readOnly value={rubric ? rubric.rubric_name : 'No rubric attached'} />
         </div>
+        {selAssignment && (
+          <div className="form-row">
+            <label className="form-label">AI Grading Document:</label>
+            <input
+              className="form-input"
+              readOnly
+              value={results[0]?.main_answer_document_name || 'No Main Answer selected; old fallback applies'}
+            />
+          </div>
+        )}
 
         <div className="action-row">
           <button className="btn btn-primary" onClick={() => handleGradeAll(false)} disabled={grading || !selAssignment}>
@@ -230,11 +240,12 @@ export default function GradingPage() {
                   <th>Student No</th>
                   <th>Uploaded</th>
                   <th>View Portfolio</th>
+                  <th>AI Grading Document</th>
                   <th>AI Status</th>
                   <th>AI Score</th>
                   <th>AI Report</th>
                   <th>Error</th>
-                  <th>Final Score (0-100)</th>
+                  {/* <th>Final Score (0-100)</th> */}
                   <th>Publish Status</th>
                   <th>Actions</th>
                 </tr>
@@ -262,6 +273,10 @@ export default function GradingPage() {
                               View
                             </button>
                           )}
+                        </td>
+                        <td className="grading-document-cell">
+                          {r.main_answer_document_name || 'Fallback'}
+                          <span>{r.ai_grading_file_names || r.main_answer_uploaded_files || 'No main answer file'}</span>
                         </td>
                         <td>
                           <span className={`badge ${AI_STATUS_BADGE[aiStatus] || 'badge-warning'}`}>
@@ -291,14 +306,14 @@ export default function GradingPage() {
                         <td className="grading-error-cell">
                           {r.ai_grading_error || '-'}
                         </td>
-                        <td>
+                        {/* <td>
                           <input
                             type="number" min="0" max="100"
                             className="form-input grading-score-input"
                             value={finalScores[r.portfolio_id] ?? ''}
                             onChange={e => setFinalScores(s => ({ ...s, [r.portfolio_id]: e.target.value }))}
                           />
-                        </td>
+                        </td> */}
                         <td>
                           <span className={`badge ${r.status === 'PUBLISHED' ? 'badge-success' : 'badge-warning'}`}>
                             {r.status || 'DRAFT'}
