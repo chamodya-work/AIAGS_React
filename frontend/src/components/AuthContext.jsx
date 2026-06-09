@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api/api';
+import { normalizeRole, roleLabel } from '../utils/roles';
 
 const AuthContext = createContext(null);
 
@@ -7,13 +8,19 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const normalizeUser = (data) => {
+    const u = data?.user || data;
+    if (!u) return null;
+    const role = normalizeRole(u.role);
+    return { ...u, role, role_label: u.role_label || roleLabel(role) };
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('aigs_token');
     if (token) {
       api.auth.me()
         .then(data => {
-          // Backend /me returns { user: { user_id, role, email, display_name, stdNo? } }
-          setUser(data.user || data);
+          setUser(normalizeUser(data));
         })
         .catch(() => {
           localStorage.removeItem('aigs_token');
@@ -27,8 +34,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const data = await api.auth.login(email, password);
     localStorage.setItem('aigs_token', data.token);
-    // Backend returns { token, user: { user_id, role, email, display_name, stdNo? } }
-    const u = data.user || data;
+    const u = normalizeUser(data);
     setUser(u);
     return data;
   };

@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/api';
+import { roleLabel } from '../utils/roles';
 
-const ROLES = ['admin', 'teacher', 'student'];
+const ROLE_OPTIONS = [
+  { value: 'admin', label: 'Admin / Head' },
+  { value: 'teacher', label: 'Lecturer' },
+  { value: 'student', label: 'Student' },
+];
 const EMPTY = { display_name: '', email: '', password: '', role: 'student', student_no: '', teacher_id: '', department: '' };
 
 export default function ManageUsers() {
@@ -53,7 +58,7 @@ export default function ManageUsers() {
     if (!editUser && !form.password) { setError('Password is required for new users.'); return; }
     if (!editUser && form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     if (form.role === 'student' && !form.student_no) { setError('Student number is required for students.'); return; }
-    if (form.role === 'teacher' && !form.teacher_id) { setError('Teacher ID is required for teachers.'); return; }
+    if (form.role === 'teacher' && !form.teacher_id) { setError('Lecturer ID is required for lecturers.'); return; }
     setError(''); setSaving(true);
     try {
       if (editUser) {
@@ -112,7 +117,7 @@ export default function ManageUsers() {
             <label className="filter-label">Role</label>
             <select className="filter-select" value={filterRole} onChange={e => setFilterRole(e.target.value)}>
               <option value="">All Roles</option>
-              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
@@ -146,7 +151,7 @@ export default function ManageUsers() {
                     <td>{u.email}</td>
                     <td>
                       <span className={`badge ${u.role==='admin' ? 'badge-info' : u.role==='teacher' ? 'badge-success' : 'badge-warning'}`}>
-                        {u.role}
+                        {u.role_label || roleLabel(u.role)}
                       </span>
                     </td>
                     <td>{u.student_no || '—'}</td>
@@ -191,7 +196,7 @@ export default function ManageUsers() {
               <label className="form-label">Role:</label>
               <select className="form-select" value={form.role}
                 onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             {form.role === 'student' && (
@@ -204,8 +209,8 @@ export default function ManageUsers() {
             )}
             {form.role === 'teacher' && (
               <div className="form-row">
-                <label className="form-label">Teacher ID:</label>
-                <input className="form-input" placeholder="e.g. T001"
+                <label className="form-label">Lecturer ID:</label>
+                <input className="form-input" placeholder="e.g. L001"
                   disabled={!!editUser}
                   value={form.teacher_id} onChange={e => setForm(f => ({ ...f, teacher_id: e.target.value }))} />
               </div>

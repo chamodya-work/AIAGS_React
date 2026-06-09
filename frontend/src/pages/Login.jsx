@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
+import { homeForRole } from '../utils/roles';
 
 export default function LoginPage() {
   const { user, login } = useAuth();
@@ -20,7 +21,7 @@ export default function LoginPage() {
     try {
       const data = await login(email, password);
       const role = data?.user?.role || data?.role;
-      navigate(role === 'student' ? '/student/home' : '/portfolio/list');
+      navigate(homeForRole(role));
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {

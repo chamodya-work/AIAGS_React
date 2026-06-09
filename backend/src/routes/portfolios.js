@@ -5,7 +5,13 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { uploadPortfolio, listPortfolios, getPortfolio, deletePortfolio } from '../controllers/portfolioController.js';
+import {
+  uploadPortfolio,
+  listPortfolios,
+  getPortfolio,
+  deletePortfolio,
+  viewSubmissionFileForStaff,
+} from '../controllers/portfolioController.js';
 
 dotenv.config();
 
@@ -22,11 +28,12 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024, files: 10 } });
 
-router.get('/', requireAuth, listPortfolios);
-router.get('/:id', requireAuth, getPortfolio);
-router.post('/upload', requireAuth, requireRole('admin','teacher','student'), upload.single('file'), uploadPortfolio);
-router.delete('/:id', requireAuth, requireRole('admin','teacher'), deletePortfolio);
+router.get('/', requireAuth, requireRole('admin','teacher'), listPortfolios);
+router.get('/files/:fileId/view', requireAuth, requireRole('admin','teacher'), viewSubmissionFileForStaff);
+router.get('/:id', requireAuth, requireRole('admin','teacher'), getPortfolio);
+router.post('/upload', requireAuth, requireRole('admin'), upload.any(), uploadPortfolio);
+router.delete('/:id', requireAuth, requireRole('admin'), deletePortfolio);
 
 export default router;

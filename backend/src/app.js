@@ -9,8 +9,12 @@ import assignmentRoutes from './routes/assignments.js';
 import rubricRoutes from './routes/rubrics.js';
 import portfolioRoutes from './routes/portfolios.js';
 import gradingRoutes from './routes/grading.js';
+import lecturerAssignmentRoutes from './routes/lecturerAssignments.js';
+import manualGradingRoutes from './routes/manualGrading.js';
+import notificationRoutes from './routes/notifications.js';
 import metaRoutes from "./routes/metaRoutes.js";
 import studentRoutes from "./routes/students.js";
+import { startNotificationScheduler } from './services/notificationScheduler.js';
 
 dotenv.config();
 
@@ -28,6 +32,26 @@ app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Rubric files must not be publicly downloadable; use protected rubric API routes.
+app.use('/uploads/rubrics', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
+// AI report PDFs must stay behind protected grading API routes.
+app.use('/uploads/reports', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
+// Assignment guideline files must stay behind protected assignment API routes.
+app.use('/uploads/guidelines', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
+// Student required-document submission files must stay behind protected API routes.
+app.use('/uploads/submissions', (req, res) => {
+  res.status(403).json({ error: 'Access denied' });
+});
+
 // Uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
@@ -39,6 +63,9 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/rubrics', rubricRoutes);
 app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/grading', gradingRoutes);
+app.use('/api/lecturer-assignments', lecturerAssignmentRoutes);
+app.use('/api/manual-grading', manualGradingRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/student', studentRoutes);
 
 // Serve React frontend (production build)
@@ -59,4 +86,5 @@ app.get('*', (req, res) => {
 const port = Number(process.env.PORT || 4000);
 app.listen(port, () => {
   console.log(`AIGS backend running on http://localhost:${port}`);
+  startNotificationScheduler();
 });

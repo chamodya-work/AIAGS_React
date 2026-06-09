@@ -24,6 +24,58 @@ async function request(path, opts = {}) {
   return data;
 }
 
+async function openAuthorizedFile(path) {
+  const token = localStorage.getItem('aigs_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(BASE + path, { headers });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      const data = await res.json();
+      message = data?.error || data?.message || message;
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function downloadAuthorizedFile(path, fallbackFilename) {
+  const token = localStorage.getItem('aigs_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(BASE + path, { headers });
+
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      const data = await res.json();
+      message = data?.error || data?.message || message;
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || fallbackFilename || 'download.pdf';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export const api = {
   auth: {
     // POST /api/auth/login
@@ -44,6 +96,13 @@ export const api = {
       request(`/api/batches${course_name ? `?course_name=${encodeURIComponent(course_name)}` : ''}`),
   },
 
+  departments: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/api/departments${q ? `?${q}` : ''}`);
+    },
+  },
+
   // /api/assignments
   assignments: {
     list: (params = {}) => {
@@ -51,14 +110,22 @@ export const api = {
       return request(`/api/assignments${q ? `?${q}` : ''}`);
     },
     get: (id) => request(`/api/assignments/${id}`),
-    // Backend schema: { assignment_name, batch, course_name, department?, start_date?, deadline_date?, remark? }
-    create: (payload) => request('/api/assignments', { method: 'POST', body: JSON.stringify(payload) }),
+    create: (payload) =>
+      request('/api/assignments', {
+        method: 'POST',
+        body: payload instanceof FormData ? payload : JSON.stringify(payload),
+      }),
     update: (id, payload) => request(`/api/assignments/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     remove: (id) => request(`/api/assignments/${id}`, { method: 'DELETE' }),
+    openGuideline: (id) => openAuthorizedFile(`/api/assignments/${id}/guideline`),
   },
 
   // /api/rubrics
   rubrics: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return request(`/api/rubrics${q ? `?${q}` : ''}`);
+    },
     byAssignment: (assignmentId) => request(`/api/rubrics/assignment/${assignmentId}`),
     create: (payload) => request('/api/rubrics', { method: 'POST', body: JSON.stringify(payload) }),
     upload: ({ assignment_id, rubric_name, file }) => {
@@ -68,6 +135,7 @@ export const api = {
       fd.append('file', file);
       return request('/api/rubrics/upload', { method: 'POST', body: fd });
     },
+    openFile: (rubricId) => openAuthorizedFile(`/api/rubrics/${rubricId}/file`),
     update: (rubricId, payload) => request(`/api/rubrics/${rubricId}`, { method: 'PUT', body: JSON.stringify(payload) }),
     remove: (rubricId) => request(`/api/rubrics/${rubricId}`, { method: 'DELETE' }),
   },
@@ -80,24 +148,34 @@ export const api = {
       return request(`/api/portfolios?${qs.toString()}`);
     },
     // Backend requires: student_no (string), assignment_id (number), file (multipart)
-    upload: ({ student_no, assignment_id, file }) => {
+    upload: ({ student_no, assignment_id, file, files }) => {
       const fd = new FormData();
       fd.append('student_no', student_no);
       fd.append('assignment_id', String(assignment_id));
-      fd.append('file', file);
+      const uploadFiles = files?.length ? files : (file ? [file] : []);
+      uploadFiles.forEach((item) => fd.append(uploadFiles.length > 1 ? 'files' : 'file', item));
       return request('/api/portfolios/upload', { method: 'POST', body: fd });
     },
     remove: (id) => request(`/api/portfolios/${id}`, { method: 'DELETE' }),
+    openFile: (fileId) => openAuthorizedFile(`/api/portfolios/files/${fileId}/view`),
   },
 
   // /api/grading
   grading: {
-    gradePortfolioAI: (portfolioId) =>
-      request(`/api/grading/portfolio/${portfolioId}/ai`, { method: 'POST' }),
-    gradeAssignmentAI: (assignmentId) =>
-      request(`/api/grading/assignment/${assignmentId}/ai`, { method: 'POST' }),
+    gradePortfolioAI: (portfolioId, options = {}) =>
+      request(`/api/grading/portfolio/${portfolioId}/ai`, { method: 'POST', body: JSON.stringify(options) }),
+    gradeAssignmentAI: (assignmentId, options = {}) =>
+      request(`/api/grading/assignment/${assignmentId}/ai`, { method: 'POST', body: JSON.stringify(options) }),
+    statusByAssignment: (assignmentId) =>
+      request(`/api/grading/assignment/${assignmentId}/status`),
     resultsByAssignment: (assignmentId) =>
       request(`/api/grading/assignment/${assignmentId}/results`),
+    report: (portfolioId) => request(`/api/grading/portfolio/${portfolioId}/report`),
+    downloadReportPdf: (portfolioId) =>
+      downloadAuthorizedFile(
+        `/api/grading/portfolio/${portfolioId}/report/pdf`,
+        `ai-assignment-evaluation-report-${portfolioId}.pdf`
+      ),
     // Backend expects: { final_grade: number, status?: 'DRAFT'|'PUBLISHED' }
     setFinal: (portfolioId, payload) =>
       request(`/api/grading/portfolio/${portfolioId}/final`, {
@@ -108,9 +186,71 @@ export const api = {
       request(`/api/grading/assignment/${assignmentId}/publish`, { method: 'POST' }),
   },
 
+  lecturerAssignments: {
+    lecturers: () => request('/api/lecturer-assignments/lecturers'),
+    submissions: (assignmentId) => request(`/api/lecturer-assignments/assignments/${assignmentId}/submissions`),
+    groups: (assignmentId) => request(`/api/lecturer-assignments/assignments/${assignmentId}/groups`),
+    assign: (payload) =>
+      request('/api/lecturer-assignments/assign', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    distribute: (payload) =>
+      request('/api/lecturer-assignments/distribute', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    unassign: (payload) =>
+      request('/api/lecturer-assignments/unassign', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  manualGrading: {
+    resultsByAssignment: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/results`),
+    save: (portfolioId, payload) =>
+      request(`/api/manual-grading/portfolio/${portfolioId}/save`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    submitToHead: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/submit-to-head`, { method: 'POST' }),
+    publishToStudents: (assignmentId) =>
+      request(`/api/manual-grading/assignment/${assignmentId}/publish-to-students`, { method: 'POST' }),
+  },
+
+  notifications: {
+    sendDeadlineReminders: () =>
+      request('/api/notifications/send-deadline-reminders', { method: 'POST' }),
+  },
+
   // /api/student
   student: {
     dashboard: () => request('/api/student/dashboard'),
+    result: (assignmentId) => request(`/api/student/results/${assignmentId}`),
+    assignmentRequirements: (assignmentId) => request(`/api/student/assignments/${assignmentId}/requirements`),
+    submission: (assignmentId) => request(`/api/student/assignments/${assignmentId}/submission`),
+    saveSubmission: (assignmentId, payload) =>
+      request(`/api/student/assignments/${assignmentId}/submission`, {
+        method: 'POST',
+        body: payload,
+      }),
+    updateSubmission: (assignmentId, payload) =>
+      request(`/api/student/assignments/${assignmentId}/submission`, {
+        method: 'PUT',
+        body: payload,
+      }),
+    removeSubmissionFile: (fileId) => request(`/api/student/submission-files/${fileId}`, { method: 'DELETE' }),
+    openSubmissionFile: (fileId) => openAuthorizedFile(`/api/student/submission-files/${fileId}/view`),
+    feedbackAttempts: (assignmentId) => request(`/api/student/feedback/attempts/${assignmentId}`),
+    feedbackHistory: (assignmentId) => request(`/api/student/feedback/history/${assignmentId}`),
+    requestFeedback: (assignmentId) =>
+      request('/api/student/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ assignment_id: assignmentId }),
+      }),
   },
 
   // /api/auth/users  (admin only)

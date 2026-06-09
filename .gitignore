@@ -54,3 +54,4 @@ desktop.ini
 *.sqlite3
 *.tmp
 *.temp
+backend/private/

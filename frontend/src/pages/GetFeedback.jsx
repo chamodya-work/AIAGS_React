@@ -1,128 +1,225 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
-import { useAuth } from '../components/AuthContext';
+
+const MAX_ATTEMPTS_FALLBACK = 3;
+
+function formatDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
 
 export default function GetFeedback() {
-  const { user } = useAuth();
   const [assignments, setAssignments] = useState([]);
-  const [selAssignment, setSelAssignment] = useState('');
-  const [feedback, setFeedback]       = useState(null);
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState('');
-  const fileRef = useRef();
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
+  const [attempts, setAttempts] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [latestFeedback, setLatestFeedback] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingFeedbackData, setLoadingFeedbackData] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    api.assignments.list()
-      .then(d => setAssignments(d.assignments || []))
-      .catch(err => setError(err.message));
+    api.student.dashboard()
+      .then((data) => setAssignments(data.assignments || []))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
-  const handleGetFeedback = async () => {
-    if (!selAssignment) { setError('Select an assignment first.'); return; }
-    setError(''); setLoading(true); setFeedback(null);
-    try {
-      const file = fileRef.current?.files?.[0];
+  const selectedAssignment = useMemo(
+    () => assignments.find((assignment) => String(assignment.assignment_id) === String(selectedAssignmentId)) || null,
+    [assignments, selectedAssignmentId]
+  );
 
-      // If user uploaded a new file, upload it first then grade
-      if (file) {
-        const student_no = user?.student_no || user?.stdNo || user?.email || '';
-        const p = await api.portfolios.upload({ student_no, assignment_id: selAssignment, file });
-        const portfolioId = p.portfolio?.portfolio_id;
-        if (portfolioId) {
-          const gradeRes = await api.grading.gradePortfolioAI(portfolioId);
-          setFeedback(gradeRes.ai || gradeRes);
-        }
-      } else {
-        // Get existing grading results
-        const d = await api.grading.resultsByAssignment(selAssignment);
-        const rows = d.results || [];
-        setFeedback(rows[0] || null);
-      }
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+  const loadFeedbackData = async (assignmentId) => {
+    if (!assignmentId) {
+      setAttempts(null);
+      setHistory([]);
+      setLatestFeedback(null);
+      return;
+    }
+
+    setLoadingFeedbackData(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await api.student.feedbackHistory(assignmentId);
+      setAttempts(data.attempts || null);
+      setHistory(data.history || []);
+      setLatestFeedback((data.history || []).find((item) => item.feedback_status === 'completed') || null);
+    } catch (err) {
+      setError(err.message);
+      setAttempts(null);
+      setHistory([]);
+      setLatestFeedback(null);
+    } finally {
+      setLoadingFeedbackData(false);
+    }
   };
+
+  const handleAssignmentChange = async (assignmentId) => {
+    setSelectedAssignmentId(assignmentId);
+    await loadFeedbackData(assignmentId);
+  };
+
+  const handleRequestFeedback = async () => {
+    if (!selectedAssignmentId) {
+      setError('Select an assignment first.');
+      return;
+    }
+
+    setGenerating(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await api.student.requestFeedback(selectedAssignmentId);
+      setAttempts(data.attempts || null);
+      setHistory(data.history || []);
+
+      if (data.feedback?.feedback_status === 'completed') {
+        setLatestFeedback(data.feedback);
+        setSuccess('AI feedback generated.');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setLatestFeedback((data.history || []).find((item) => item.feedback_status === 'completed') || null);
+        setError(data.feedback?.feedback_error || 'AI feedback could not be generated.');
+      }
+    } catch (err) {
+      setError(err.message);
+      await loadFeedbackData(selectedAssignmentId);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const maxAttempts = attempts?.max_attempts || MAX_ATTEMPTS_FALLBACK;
+  const remainingAttempts = attempts?.remaining_attempts ?? maxAttempts;
+  const canRequest = Boolean(
+    selectedAssignmentId &&
+    selectedAssignment?.portfolio_id &&
+    !generating &&
+    !loadingFeedbackData &&
+    (attempts ? attempts.can_request : true)
+  );
+  const limitReached = attempts && !attempts.can_request;
 
   return (
     <>
       <h1 className="page-title">Get Feedback</h1>
       {error && <div className="alert alert-error">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
 
       <div className="content-card">
-        <div className="form-row" style={{ flexWrap:'wrap', gap:12, alignItems:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:220 }}>
-            <label className="form-label">Assignment:</label>
-            <select className="form-select" value={selAssignment} onChange={e => setSelAssignment(e.target.value)}>
-              <option value="">Select Assignment</option>
-              {assignments.map(a => (
-                <option key={a.assignment_id} value={a.assignment_id}>
-                  {a.assignment_name} ({a.batch})
-                </option>
-              ))}
-            </select>
+        <div className="alert alert-warning">
+          This is an AI-generated feedback report for learning and improvement purposes only. It is not the final grade. Final marks are decided by the lecturer/head of department after official evaluation.
+        </div>
+        <div className="alert alert-info">
+          You can request AI feedback a maximum of {maxAttempts} times for this assignment.
+        </div>
+
+        <div className="form-row">
+          <label className="form-label">Assignment:</label>
+          <select
+            className="form-select"
+            value={selectedAssignmentId}
+            onChange={(event) => handleAssignmentChange(event.target.value)}
+            disabled={loading}
+          >
+            <option value="">Select Assignment</option>
+            {assignments.map((assignment) => (
+              <option key={assignment.assignment_id} value={assignment.assignment_id}>
+                {assignment.assignment_name} ({assignment.course_name})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedAssignment && (
+          <div className="feedback-summary">
+            <div>
+              <span className="feedback-summary-label">Submission Status</span>
+              <strong>{selectedAssignment.status}</strong>
+            </div>
+            <div>
+              <span className="feedback-summary-label">Uploaded</span>
+              <strong>{selectedAssignment.upload_date ? formatDate(selectedAssignment.upload_date) : 'No submission yet'}</strong>
+            </div>
+            <div>
+              <span className="feedback-summary-label">Feedback Attempts Remaining</span>
+              <strong>{remainingAttempts}/{maxAttempts}</strong>
+            </div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8, flex:1, minWidth:200 }}>
-            <label className="form-label" style={{ minWidth:80 }}>Upload new:</label>
-            <input type="file" ref={fileRef} accept=".pdf,.doc,.docx" style={{ flex:1 }} />
+        )}
+
+        {selectedAssignment && !selectedAssignment.portfolio_id && (
+          <div className="alert alert-warning">
+            Upload your assignment submission before requesting AI feedback.
           </div>
-          <button className="btn btn-primary" onClick={handleGetFeedback} disabled={loading}>
-            {loading ? 'Processing…' : '🤖 GET AI FEEDBACK'}
+        )}
+
+        {limitReached && (
+          <div className="alert alert-warning">
+            You have used all {maxAttempts} AI feedback attempts for this assignment.
+          </div>
+        )}
+
+        <div className="action-row">
+          <button
+            className="btn btn-primary"
+            onClick={handleRequestFeedback}
+            disabled={!canRequest}
+          >
+            {generating ? 'Generating Feedback...' : 'Get AI Feedback'}
           </button>
         </div>
 
-        {loading && (
-          <div className="spinner-wrap">
-            <div style={{ textAlign:'center' }}>
-              <div className="spinner" style={{ margin:'0 auto 12px' }} />
-              <div style={{ fontSize:14, color:'#666' }}>AI is analysing your portfolio…</div>
+        {loadingFeedbackData && (
+          <div className="spinner-wrap"><div className="spinner" /></div>
+        )}
+
+        {latestFeedback?.feedback_text && (
+          <div className="feedback-report">
+            <div className="section-header">Latest AI Feedback</div>
+            <div className="section-content">
+              <pre className="feedback-report-text">{latestFeedback.feedback_text}</pre>
             </div>
           </div>
         )}
 
-        {!loading && feedback === null && selAssignment && (
-          <div style={{ textAlign:'center', padding:'40px 20px', color:'#999', marginTop:16 }}>
-            Click "GET AI FEEDBACK" to load feedback for this assignment.
-          </div>
-        )}
-
-        {!loading && feedback && (
-          <div style={{ marginTop:24 }}>
-            {/* Score summary */}
-            <div style={{ background:'#f0f7ff', border:'1px solid #2196F3', borderRadius:10, padding:'20px 24px', marginBottom:20, display:'flex', gap:40, flexWrap:'wrap' }}>
-              {feedback.ai_grade !== undefined && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#999', textTransform:'uppercase' }}>AI Grade</div>
-                  <div style={{ fontSize:36, fontWeight:700, color:'#2196F3' }}>{feedback.ai_grade ?? '—'}</div>
+        <div className="feedback-section">
+          <div className="section-container">
+            <div className="section-header">Previous Feedback History</div>
+            <div className="section-content">
+              {!selectedAssignmentId ? (
+                <div className="feedback-empty">Select an assignment to view feedback history.</div>
+              ) : history.length === 0 ? (
+                <div className="feedback-empty">No feedback history for this assignment yet.</div>
+              ) : (
+                <div className="feedback-history-list">
+                  {history.map((item) => (
+                    <div key={item.feedback_id} className="feedback-history-item">
+                      <div className="feedback-history-meta">
+                        <strong>Attempt {item.attempt_no}</strong>
+                        <span>{formatDate(item.created_at)}</span>
+                        <span className={`badge ${item.feedback_status === 'completed' ? 'badge-success' : item.feedback_status === 'failed' ? 'badge-danger' : 'badge-info'}`}>
+                          {item.feedback_status}
+                        </span>
+                      </div>
+                      {item.feedback_status === 'completed' ? (
+                        <pre className="feedback-report-text">{item.feedback_text}</pre>
+                      ) : (
+                        <div className="feedback-error-text">{item.feedback_error || 'Feedback could not be generated.'}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
-              {feedback.final_grade !== undefined && (
-                <div>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#999', textTransform:'uppercase' }}>Final Grade</div>
-                  <div style={{ fontSize:36, fontWeight:700, color:'#27ae60' }}>{feedback.final_grade ?? '—'}</div>
-                </div>
-              )}
-              <div>
-                <div style={{ fontSize:11, fontWeight:700, color:'#999', textTransform:'uppercase' }}>Student No</div>
-                <div style={{ fontSize:18, fontWeight:600, color:'#333' }}>{feedback.student_no || '—'}</div>
-              </div>
-            </div>
-
-            {/* AI report */}
-            {(feedback.ai_review_report || feedback.ai_review) && (
-              <div className="section-container">
-                <div className="section-header">AI Review Report</div>
-                <div className="section-content">
-                  <p style={{ fontSize:14, lineHeight:1.8, color:'#444', whiteSpace:'pre-wrap' }}>
-                    {feedback.ai_review_report || feedback.ai_review}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div style={{ textAlign:'center', marginTop:24 }}>
-              <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Print Feedback</button>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </>
   );

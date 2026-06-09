@@ -53,7 +53,13 @@ CREATE TABLE IF NOT EXISTS assignments (
   course_name VARCHAR(100) NOT NULL,
   department VARCHAR(100) NULL,
   start_date DATE NULL,
+  start_time TIME NULL DEFAULT NULL,
   deadline_date DATE NULL,
+  deadline_time TIME NULL DEFAULT NULL,
+  guideline_file_path VARCHAR(1000) NULL,
+  guideline_file_original_name VARCHAR(255) NULL,
+  guideline_file_mime VARCHAR(255) NULL,
+  guideline_file_size BIGINT NULL,
   remark TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -64,7 +70,15 @@ CREATE TABLE IF NOT EXISTS rubrics (
   rubric_name VARCHAR(255) NOT NULL,
   assignment_id INT NOT NULL,
   rubric_text LONGTEXT NULL,
+  rubric_file_path VARCHAR(1000) NULL,
+  rubric_file_original_name VARCHAR(255) NULL,
+  rubric_file_mime VARCHAR(255) NULL,
+  rubric_extracted_text LONGTEXT NULL,
+  rubric_extraction_status ENUM('pending','extracted','failed') DEFAULT 'pending',
+  rubric_extraction_error TEXT NULL,
+  extracted_at TIMESTAMP NULL,
   create_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   created_by INT NULL,
   CONSTRAINT fk_rubric_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
   CONSTRAINT fk_rubric_created_by FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
@@ -84,9 +98,18 @@ CREATE TABLE IF NOT EXISTS portfolios (
 -- AI_Grading
 CREATE TABLE IF NOT EXISTS ai_grading (
   portfolio_id INT PRIMARY KEY,
+  rubric_id INT NULL,
   ai_grade DECIMAL(5,2) NULL,
   ai_review_report LONGTEXT NULL,
-  graded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ai_status ENUM('pending','processing','graded','failed') DEFAULT 'pending',
+  ai_report_text LONGTEXT NULL,
+  ai_report_pdf_path VARCHAR(1000) NULL,
+  ai_grading_error TEXT NULL,
+  ai_grading_technical_error LONGTEXT NULL,
+  ai_model VARCHAR(100) NULL,
+  grading_started_at TIMESTAMP NULL DEFAULT NULL,
+  graded_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_ai_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE
 );
 
@@ -96,12 +119,97 @@ CREATE TABLE IF NOT EXISTS final_grading (
   portfolio_id INT NOT NULL,
   status ENUM('DRAFT','PUBLISHED') DEFAULT 'DRAFT',
   final_grade DECIMAL(5,2) NULL,
+  manual_score DECIMAL(5,2) NULL,
+  manual_remark TEXT NULL,
+  saved_by INT NULL,
+  saved_by_role VARCHAR(50) NULL,
+  saved_at TIMESTAMP NULL DEFAULT NULL,
+  publish_status ENUM('draft','submitted_to_head','published_to_student') NOT NULL DEFAULT 'draft',
+  submitted_to_head_at TIMESTAMP NULL DEFAULT NULL,
+  published_by INT NULL,
+  published_at TIMESTAMP NULL DEFAULT NULL,
+  ai_score_at_save DECIMAL(5,2) NULL,
+  score_difference DECIMAL(5,2) NULL,
+  score_difference_warning TINYINT(1) NOT NULL DEFAULT 0,
   review_report_id INT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (student_no, portfolio_id),
   CONSTRAINT fk_final_student FOREIGN KEY (student_no) REFERENCES students(student_no) ON DELETE CASCADE,
   CONSTRAINT fk_final_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE
 );
+
+-- Student AI feedback history
+CREATE TABLE IF NOT EXISTS student_feedback (
+  feedback_id INT AUTO_INCREMENT PRIMARY KEY,
+  student_no VARCHAR(50) NOT NULL,
+  assignment_id INT NOT NULL,
+  portfolio_id INT NULL,
+  attempt_no INT NOT NULL,
+  feedback_text LONGTEXT NULL,
+  feedback_status ENUM('processing','completed','failed') DEFAULT 'processing',
+  feedback_error TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_feedback_attempt (student_no, assignment_id, attempt_no),
+  INDEX idx_feedback_student_assignment (student_no, assignment_id),
+  CONSTRAINT fk_feedback_student FOREIGN KEY (student_no) REFERENCES students(student_no) ON DELETE CASCADE,
+  CONSTRAINT fk_feedback_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
+  CONSTRAINT fk_feedback_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE SET NULL
+);
+
+-- Assignment email notification log
+CREATE TABLE IF NOT EXISTS assignment_notifications (
+  notification_id INT AUTO_INCREMENT PRIMARY KEY,
+  assignment_id INT NOT NULL,
+  student_no VARCHAR(50) NULL,
+  email VARCHAR(255) NOT NULL,
+  notification_type ENUM('created','deadline_reminder') NOT NULL,
+  status ENUM('pending','sent','failed','skipped') DEFAULT 'pending',
+  error TEXT NULL,
+  sent_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_assignment_student_notification (assignment_id, student_no, notification_type),
+  INDEX idx_assignment_notifications_assignment (assignment_id),
+  INDEX idx_assignment_notifications_type_status (notification_type, status),
+  CONSTRAINT fk_assignment_notifications_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
+  CONSTRAINT fk_assignment_notifications_student FOREIGN KEY (student_no) REFERENCES students(student_no) ON DELETE SET NULL
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+-- Required submission documents per assignment
+CREATE TABLE IF NOT EXISTS assignment_required_documents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  assignment_id INT NOT NULL,
+  document_name VARCHAR(255) NOT NULL,
+  allowed_file_type VARCHAR(50) NOT NULL,
+  is_mandatory TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_required_docs_assignment (assignment_id),
+  CONSTRAINT fk_required_docs_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE
+);
+
+-- Portfolio files grouped by assignment required-document definitions
+CREATE TABLE IF NOT EXISTS portfolio_files (
+  file_id INT AUTO_INCREMENT PRIMARY KEY,
+  portfolio_id INT NULL,
+  assignment_id INT NOT NULL,
+  student_no VARCHAR(50) NOT NULL,
+  required_document_id INT NULL,
+  file_path VARCHAR(1000) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(255) NULL,
+  file_size BIGINT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  removed_at TIMESTAMP NULL DEFAULT NULL,
+  INDEX idx_portfolio_files_portfolio (portfolio_id),
+  INDEX idx_portfolio_files_assignment_student (assignment_id, student_no),
+  INDEX idx_portfolio_files_required_document (required_document_id),
+  CONSTRAINT fk_portfolio_files_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE SET NULL,
+  CONSTRAINT fk_portfolio_files_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
+  CONSTRAINT fk_portfolio_files_student FOREIGN KEY (student_no) REFERENCES students(student_no) ON DELETE CASCADE,
+  CONSTRAINT fk_portfolio_files_required_document FOREIGN KEY (required_document_id) REFERENCES assignment_required_documents(id) ON DELETE SET NULL
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 -- Assign_Teachers
 CREATE TABLE IF NOT EXISTS assign_teachers (
@@ -119,6 +227,24 @@ CREATE TABLE IF NOT EXISTS assigned_portfolios (
   PRIMARY KEY (teacher_id, portfolio_id),
   CONSTRAINT fk_assignedp_teacher FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id) ON DELETE CASCADE,
   CONSTRAINT fk_assignedp_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE
+);
+
+-- Lecturer portfolio ownership for grading/report visibility
+CREATE TABLE IF NOT EXISTS lecturer_portfolio_assignments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  assignment_id INT NOT NULL,
+  portfolio_id INT NOT NULL,
+  lecturer_user_id INT NOT NULL,
+  assigned_by INT NULL,
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_lpa_portfolio (portfolio_id),
+  INDEX idx_lpa_assignment (assignment_id),
+  INDEX idx_lpa_lecturer (lecturer_user_id),
+  CONSTRAINT fk_lpa_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(assignment_id) ON DELETE CASCADE,
+  CONSTRAINT fk_lpa_portfolio FOREIGN KEY (portfolio_id) REFERENCES portfolios(portfolio_id) ON DELETE CASCADE,
+  CONSTRAINT fk_lpa_lecturer_user FOREIGN KEY (lecturer_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CONSTRAINT fk_lpa_assigned_by FOREIGN KEY (assigned_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 -- Seed: a default admin user (email: admin@aigs.local, password: admin123)

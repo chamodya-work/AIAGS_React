@@ -10,8 +10,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const schemaPath = path.join(__dirname, 'schema.sql');
+const migrationPaths = [
+  path.join(__dirname, 'step2_dynamic_ai_grading_migration.sql'),
+  path.join(__dirname, 'step2_fix_ai_grading_timestamps.sql'),
+  path.join(__dirname, 'step3_student_feedback_migration.sql'),
+  path.join(__dirname, 'step4_assignment_upgrade_migration.sql'),
+  path.join(__dirname, 'step5_student_submission_files_migration.sql'),
+  path.join(__dirname, 'step6_lecturer_assignments_migration.sql'),
+  path.join(__dirname, 'step7_manual_grading_migration.sql'),
+  path.join(__dirname, 'step9_assignment_notifications_migration.sql'),
+];
 
-const sql = await fs.readFile(schemaPath, 'utf8');
+const schemaSql = await fs.readFile(schemaPath, 'utf8');
+const migrationSql = [];
+
+for (const migrationPath of migrationPaths) {
+  try {
+    migrationSql.push(await fs.readFile(migrationPath, 'utf8'));
+  } catch {
+    // Older checkouts may not have every migration file.
+  }
+}
 
 const conn = await mysql.createConnection({
   host: process.env.DB_HOST,
@@ -21,7 +40,12 @@ const conn = await mysql.createConnection({
   multipleStatements: true
 });
 
-await conn.query(sql);
+await conn.query(schemaSql);
+for (const sql of migrationSql) {
+  if (sql.trim()) {
+    await conn.query(sql);
+  }
+}
 await conn.end();
 
-console.log('✅ Database schema applied');
+console.log('Database schema applied');
