@@ -334,9 +334,9 @@ export default function GradingPage() {
                               ) : rowReport ? (
                                 <>
                                   <div className="grading-report-meta">
-                                    <span>Student Number: <strong>{rowReport.student_no}</strong></span>
+                                    {/* <span>Student Number: <strong>{rowReport.student_no}</strong></span>
                                     <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span>
-                                    <span>Model: <strong>{rowReport.ai_model || '-'}</strong></span>
+                                    <span>Model: <strong>{rowReport.ai_model || '-'}</strong></span> */}
                                   </div>
                                   <pre className="grading-report-text">{rowReport.ai_report_text}</pre>
                                 </>
