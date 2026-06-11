@@ -81,6 +81,11 @@ export const api = {
     // POST /api/auth/login
     login: (email, password) =>
       request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    universityLogin: ({ userType, netId, password }) =>
+      request('/api/auth/university/login', {
+        method: 'POST',
+        body: JSON.stringify({ userType, netId, password }),
+      }),
     // GET /api/auth/me
     me: () => request('/api/auth/me'),
   },

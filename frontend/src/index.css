@@ -716,6 +716,30 @@ html, body, #root {
 .login-form-side { padding: 3rem; display: flex; flex-direction: column; justify-content: center; }
 .login-form-side h3 { font-size: 22px; font-weight: 700; color: #144573; margin-bottom: 8px; }
 .login-form-side p { font-size: 14px; color: #6c757d; margin-bottom: 28px; }
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: #eef3f8;
+  border-radius: 8px;
+  padding: 5px;
+  margin-bottom: 20px;
+}
+.login-tab {
+  border: none;
+  background: transparent;
+  color: #4f5f6f;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.login-tab.active {
+  background: white;
+  color: #144573;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
 .login-field { margin-bottom: 20px; }
 .login-field label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
 .login-input {
@@ -728,6 +752,11 @@ html, body, #root {
   transition: border-color 0.2s;
 }
 .login-input:focus { border-color: #144573; }
+.login-help {
+  color: #667085;
+  font-size: 12px;
+  margin-top: 6px;
+}
 .login-btn {
   width: 100%;
   padding: 13px;
