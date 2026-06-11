@@ -223,7 +223,8 @@ export async function createUser(req, res) {
         [
           data.student_no,
           userId,
-          data.batch || null,
+          // data.batch || null,
+          data.student_no.split('/')[1] || null,
           data.course_name || null,
           data.department || null,
         ]
