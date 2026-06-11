@@ -158,6 +158,7 @@ export const api = {
       if (student_no) qs.set('student_no', student_no);
       return request(`/api/portfolios/submission?${qs.toString()}`);
     },
+    submissionPackage: (portfolioId) => request(`/api/portfolios/${portfolioId}/submission`),
     // Backend requires: student_no (string), assignment_id (number), file (multipart)
     upload: ({ student_no, assignment_id, file, files, filesByRequirement }) => {
       const fd = new FormData();

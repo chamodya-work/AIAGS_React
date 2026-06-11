@@ -306,6 +306,61 @@ async function buildAdminSubmissionPayload(assignmentId, studentNo) {
   };
 }
 
+async function buildPortfolioSubmissionPackage(portfolioId) {
+  const row = (
+    await query(
+      `SELECT p.portfolio_id, p.student_no, p.assignment_id, p.portfolio_link, p.upload_date,
+              a.assignment_name, a.batch, a.course_name, a.department,
+              a.start_date, a.start_time, a.deadline_date, a.deadline_time, a.remark,
+              a.guideline_file_path, a.guideline_file_original_name,
+              a.guideline_file_mime, a.guideline_file_size
+       FROM portfolios p
+       JOIN assignments a ON a.assignment_id = p.assignment_id
+       WHERE p.portfolio_id=?
+       LIMIT 1`,
+      [portfolioId]
+    )
+  )[0];
+
+  if (!row) throw notFound('Portfolio not found');
+
+  const [requirements, activeFiles] = await Promise.all([
+    getRequiredDocuments(row.assignment_id),
+    query(
+      `SELECT pf.file_id, pf.portfolio_id, pf.assignment_id, pf.student_no,
+              pf.required_document_id, pf.original_name, pf.mime_type,
+              pf.file_size, pf.uploaded_at, ard.document_name, ard.allowed_file_type,
+              ard.is_mandatory, ard.is_ai_gradable
+       FROM portfolio_files pf
+       LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+       WHERE pf.portfolio_id=? AND pf.removed_at IS NULL
+       ORDER BY COALESCE(ard.id, 0) ASC, pf.uploaded_at DESC, pf.file_id DESC`,
+      [portfolioId]
+    ),
+  ]);
+
+  const completion = submissionCompletion(requirements, activeFiles);
+  return {
+    assignment: safeAssignment(row),
+    student_no: row.student_no,
+    portfolio: {
+      portfolio_id: row.portfolio_id,
+      student_no: row.student_no,
+      upload_date: row.upload_date,
+      submission_status: completion.is_complete
+        ? 'SUBMITTED'
+        : activeFiles.length > 0
+          ? 'INCOMPLETE'
+          : 'NO FILES',
+      is_complete: completion.is_complete,
+      missing_mandatory_documents: completion.missing_mandatory_documents,
+    },
+    required_documents: requirements,
+    files: activeFiles.map(safeFile),
+    groups: groupFiles(requirements, activeFiles),
+  };
+}
+
 function publishStatus(row) {
   if (row.publish_status) return row.publish_status;
   return row.status === 'PUBLISHED' ? 'published_to_student' : 'draft';
@@ -631,6 +686,19 @@ export async function listPortfolios(req, res) {
   sql += ' ORDER BY p.upload_date DESC';
   const rows = await query(sql, params);
   res.json({ portfolios: rows.map((row) => portfolioRow(row, req)) });
+}
+
+export async function getPortfolioSubmissionPackage(req, res) {
+  try {
+    const portfolioId = Number(req.params.id);
+    if (!(await ensurePortfolioAccess(req, res, portfolioId))) return;
+
+    res.json(await buildPortfolioSubmissionPackage(portfolioId));
+  } catch (e) {
+    if (e?.statusCode) return res.status(e.statusCode).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: 'Failed to load portfolio submission' });
+  }
 }
 
 export async function getPortfolio(req, res) {

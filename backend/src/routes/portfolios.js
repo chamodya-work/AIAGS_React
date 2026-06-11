@@ -9,6 +9,7 @@ import {
   uploadPortfolio,
   listPortfolios,
   getPortfolio,
+  getPortfolioSubmissionPackage,
   deletePortfolio,
   getAdminSubmission,
   removeAdminSubmissionFile,
@@ -58,6 +59,7 @@ router.get('/', requireAuth, requireRole('admin','teacher'), listPortfolios);
 router.get('/submission', requireAuth, requireRole('admin'), getAdminSubmission);
 router.get('/assignment/:assignmentId/student/:studentNo/submission', requireAuth, requireRole('admin'), getAdminSubmission);
 router.get('/files/:fileId/view', requireAuth, requireRole('admin','teacher'), viewSubmissionFileForStaff);
+router.get('/:id/submission', requireAuth, requireRole('admin','teacher'), getPortfolioSubmissionPackage);
 router.get('/:id', requireAuth, requireRole('admin','teacher'), getPortfolio);
 router.post('/upload', requireAuth, requireRole('admin'), handlePortfolioUpload, uploadPortfolio);
 router.delete('/files/:fileId', requireAuth, requireRole('admin'), removeAdminSubmissionFile);
