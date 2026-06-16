@@ -2,7 +2,25 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/api';
 
-const DEPTS = ['Medicine', 'Surgery', 'Pediatrics', 'Obstetrics', 'Community Medicine'];
+const DEPTS = [
+  'Anatomy',
+  'Biochemistry',
+  'Physiology',
+  'Pathology',
+  'Microbiology',
+  'Parasitology',
+  'Pharmacology',
+  'Forensic Medicine',
+  'Medical Education',
+  'Public Health',
+  'Medicine',
+  'Surgery',
+  'Psychiatry',
+  'Paediatrics',
+  'Disability Studies',
+  'Family Medicine',
+  'Gyn & Obs.'
+];
 
 function datePart(value) {
   return value ? String(value).slice(0, 10) : '';
