@@ -28,6 +28,7 @@ async function findExistingUser(conn, profile) {
 }
 
 async function syncStudent(conn, userId, profile) {
+  console.log('student profile details:', profile);
   const student = profile.student;
   if (!student?.student_no) return;
 

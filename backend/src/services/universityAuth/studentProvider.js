@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { authError, serviceUnavailable } from './errors.js';
-import { mapCourseName, roleLabel } from './roleMappingService.js';
+import { mapCourseNameFromStudentNumber, roleLabel } from './roleMappingService.js';
 import {
   cleanText,
   envNumber,
@@ -49,7 +49,7 @@ export function normalizeStudentProfile(raw, netId) {
   const faculty = process.env.UNIVERSITY_DEFAULT_FACULTY || 'Faculty of Medicine';
   const department = process.env.UNIVERSITY_DEFAULT_STUDENT_DEPARTMENT || 'Medicine';
   const batch = cleanText(raw?.intakeAcademicYear) || cleanText(raw?.Originalbatch) || null;
-  const courseName = mapCourseName(raw?.course);
+  const courseName = mapCourseNameFromStudentNumber(studentNo, raw?.course);
 
   return {
     university_user_id: `student:${studentNo}`,
@@ -66,7 +66,7 @@ export function normalizeStudentProfile(raw, netId) {
     student: {
       student_no: studentNo,
       batch,
-      course_name: courseName || cleanText(raw?.course) || null,
+      course_name: courseName,
       original_batch: cleanText(raw?.Originalbatch) || null,
       intake_academic_year: cleanText(raw?.intakeAcademicYear) || null,
       contact_mobile: cleanText(raw?.contactMobile) || null,

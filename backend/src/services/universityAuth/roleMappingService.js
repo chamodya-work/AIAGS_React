@@ -16,6 +16,22 @@ export function mapCourseName(course) {
   return value;
 }
 
+export function mapCourseNameFromStudentNumber(studentNumber, apiCourse) {
+  const prefix = cleanText(studentNumber).split('/')[0]?.toUpperCase() || '';
+  const byPrefix = {
+    ME: 'MBBS',
+    OT: 'OT',
+    SHS: 'SHS',
+  };
+
+  if (byPrefix[prefix]) return byPrefix[prefix];
+
+  const mappedApiCourse = mapCourseName(apiCourse);
+  if (mappedApiCourse) return mappedApiCourse;
+
+  return prefix || 'Unknown';
+}
+
 export function mapStaffRole(raw = {}) {
   const position = cleanText(raw?.role?.position || raw?.position).toLowerCase();
   const posId = cleanText(raw?.role?.pos_id || raw?.pos_id);
