@@ -5,6 +5,11 @@ import { pool, query } from '../db.js';
 import { viewSubmissionFileForStaff } from './studentSubmissionController.js';
 import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
 import { getDeadlineInfo } from '../services/deadlineService.js';
+import {
+  applySubmissionDisplayNames,
+  formatSubmissionDisplayName,
+  submissionDisplayName,
+} from '../services/submissionFileNameService.js';
 
 const createPortfolioSchema = z.object({
   student_no: z.string().min(1),
@@ -65,6 +70,7 @@ function safeRequirement(row) {
 }
 
 function safeFile(row) {
+  const displayName = submissionDisplayName(row);
   return {
     file_id: row.file_id,
     portfolio_id: row.portfolio_id,
@@ -74,7 +80,8 @@ function safeFile(row) {
     allowed_file_type: row.allowed_file_type || null,
     is_mandatory: row.is_mandatory == null ? null : Boolean(row.is_mandatory),
     is_ai_gradable: Boolean(row.is_ai_gradable),
-    original_name: row.original_name,
+    original_name: displayName,
+    display_name: displayName,
     mime_type: row.mime_type,
     file_size: row.file_size,
     uploaded_at: row.uploaded_at,
@@ -328,7 +335,7 @@ async function buildPortfolioSubmissionPackage(portfolioId) {
     getRequiredDocuments(row.assignment_id),
     query(
       `SELECT pf.file_id, pf.portfolio_id, pf.assignment_id, pf.student_no,
-              pf.required_document_id, pf.original_name, pf.mime_type,
+              pf.required_document_id, pf.file_path, pf.original_name, pf.mime_type,
               pf.file_size, pf.uploaded_at, ard.document_name, ard.allowed_file_type,
               ard.is_mandatory, ard.is_ai_gradable
        FROM portfolio_files pf
@@ -504,7 +511,12 @@ export async function uploadPortfolio(req, res) {
           studentNo,
           pending.requiredDocumentId,
           storedSubmissionPath(pending.file),
-          pending.file.originalname || path.basename(storedSubmissionPath(pending.file)),
+          formatSubmissionDisplayName(
+            studentNo,
+            pending.requirement?.document_name || 'Assignment Submission',
+            pending.file.originalname,
+            storedSubmissionPath(pending.file)
+          ),
           pending.file.mimetype || null,
           pending.file.size || null,
         ]
@@ -685,7 +697,23 @@ export async function listPortfolios(req, res) {
   if (batch) { sql += ' AND a.batch=?'; params.push(String(batch)); }
   sql += ' ORDER BY p.upload_date DESC';
   const rows = await query(sql, params);
-  res.json({ portfolios: rows.map((row) => portfolioRow(row, req)) });
+  const portfolioIds = rows.map((row) => row.portfolio_id).filter(Boolean);
+  let displayRows = rows;
+  if (portfolioIds.length) {
+    const placeholders = portfolioIds.map(() => '?').join(',');
+    const files = await query(
+      `SELECT pf.file_id, pf.portfolio_id, pf.student_no, pf.file_path, pf.original_name,
+              ard.document_name, COALESCE(ard.is_ai_gradable, 0) AS is_ai_gradable
+       FROM portfolio_files pf
+       LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+       WHERE pf.portfolio_id IN (${placeholders})
+         AND pf.removed_at IS NULL
+       ORDER BY pf.uploaded_at DESC, pf.file_id DESC`,
+      portfolioIds
+    );
+    displayRows = applySubmissionDisplayNames(rows, files);
+  }
+  res.json({ portfolios: displayRows.map((row) => portfolioRow(row, req)) });
 }
 
 export async function getPortfolioSubmissionPackage(req, res) {

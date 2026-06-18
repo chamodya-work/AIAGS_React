@@ -41,8 +41,28 @@ async function openAuthorizedFile(path) {
   }
 
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || 'download';
+  const namedBlob = typeof File === 'function'
+    ? new File([blob], filename, { type: blob.type || 'application/octet-stream' })
+    : blob;
+  const url = URL.createObjectURL(namedBlob);
+  const viewable = (blob.type || '').startsWith('application/pdf')
+    || (blob.type || '').startsWith('image/')
+    || (blob.type || '').startsWith('text/');
+
+  if (viewable) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } else {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 

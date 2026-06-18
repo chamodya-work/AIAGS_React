@@ -1,7 +1,25 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/api';
 
-const DEPARTMENT_FALLBACK = ['Medicine', 'Surgery', 'Pediatrics', 'Obstetrics', 'Community Medicine'];
+const DEPARTMENT_FALLBACK = [
+  'Anatomy',
+  'Biochemistry',
+  'Physiology',
+  'Pathology',
+  'Microbiology',
+  'Parasitology',
+  'Pharmacology',
+  'Forensic Medicine',
+  'Medical Education',
+  'Public Health',
+  'Medicine',
+  'Surgery',
+  'Psychiatry',
+  'Paediatrics',
+  'Disability Studies',
+  'Family Medicine',
+  'Gyn & Obs.',
+];
 
 const ACCEPT_BY_TYPE = {
   pdf: '.pdf',
