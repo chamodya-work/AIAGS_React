@@ -3,6 +3,11 @@ import path from 'path';
 import { pool, query } from '../db.js';
 import { ensurePortfolioAccess } from '../services/lecturerAccess.js';
 import { assertSubmissionOpen, getDeadlineInfo } from '../services/deadlineService.js';
+import {
+  formatSubmissionDisplayName,
+  safeContentDispositionFilename,
+  submissionDisplayName,
+} from '../services/submissionFileNameService.js';
 
 const ALLOWED_EXTENSIONS_BY_TYPE = {
   pdf: ['.pdf'],
@@ -75,6 +80,7 @@ function safeRequirement(row) {
 }
 
 function safeFile(row) {
+  const displayName = submissionDisplayName(row);
   return {
     file_id: row.file_id,
     portfolio_id: row.portfolio_id,
@@ -84,7 +90,8 @@ function safeFile(row) {
     allowed_file_type: row.allowed_file_type || null,
     is_mandatory: row.is_mandatory === null || row.is_mandatory === undefined ? null : Boolean(row.is_mandatory),
     is_ai_gradable: row.is_ai_gradable === null || row.is_ai_gradable === undefined ? false : Boolean(row.is_ai_gradable),
-    original_name: row.original_name,
+    original_name: displayName,
+    display_name: displayName,
     mime_type: row.mime_type,
     file_size: row.file_size,
     uploaded_at: row.uploaded_at,
@@ -467,7 +474,12 @@ export async function saveStudentSubmission(req, res) {
           ownerStudentNo,
           pending.requiredDocumentId,
           storedSubmissionPath(pending.file),
-          pending.file.originalname,
+          formatSubmissionDisplayName(
+            ownerStudentNo,
+            pending.requirement?.document_name || 'Assignment Submission',
+            pending.file.originalname,
+            storedSubmissionPath(pending.file)
+          ),
           pending.file.mimetype || null,
           pending.file.size || null,
         ]
@@ -543,11 +555,13 @@ export async function viewStudentSubmissionFile(req, res) {
 
     const file = (
       await query(
-        `SELECT file_id, file_path, original_name, mime_type
-         FROM portfolio_files
-         WHERE file_id=?
-           AND student_no IN (${placeholders})
-           AND removed_at IS NULL
+        `SELECT pf.file_id, pf.student_no, pf.file_path, pf.original_name, pf.mime_type,
+                ard.document_name
+         FROM portfolio_files pf
+         LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+         WHERE pf.file_id=?
+           AND pf.student_no IN (${placeholders})
+           AND pf.removed_at IS NULL
          LIMIT 1`,
         [fileId, ...ids]
       )
@@ -557,8 +571,9 @@ export async function viewStudentSubmissionFile(req, res) {
     const absolutePath = resolveStoredPath(file.file_path);
     if (!absolutePath || !fs.existsSync(absolutePath)) throw notFound('Submission file not found on disk');
 
+    const filename = safeContentDispositionFilename(submissionDisplayName(file));
     res.type(file.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${String(file.original_name || path.basename(absolutePath)).replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     res.sendFile(absolutePath);
   } catch (e) {
     if (!e.statusCode) console.error(e);
@@ -573,10 +588,12 @@ export async function viewSubmissionFileForStaff(req, res) {
 
     const file = (
       await query(
-        `SELECT file_id, portfolio_id, file_path, original_name, mime_type
-         FROM portfolio_files
-         WHERE file_id=?
-           AND removed_at IS NULL
+        `SELECT pf.file_id, pf.portfolio_id, pf.student_no, pf.file_path, pf.original_name,
+                pf.mime_type, ard.document_name
+         FROM portfolio_files pf
+         LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+         WHERE pf.file_id=?
+           AND pf.removed_at IS NULL
          LIMIT 1`,
         [fileId]
       )
@@ -589,8 +606,9 @@ export async function viewSubmissionFileForStaff(req, res) {
     const absolutePath = resolveStoredPath(file.file_path);
     if (!absolutePath || !fs.existsSync(absolutePath)) throw notFound('Submission file not found on disk');
 
+    const filename = safeContentDispositionFilename(submissionDisplayName(file));
     res.type(file.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${String(file.original_name || path.basename(absolutePath)).replace(/"/g, '')}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     res.sendFile(absolutePath);
   } catch (e) {
     if (!e.statusCode) console.error(e);

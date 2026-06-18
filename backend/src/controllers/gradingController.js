@@ -9,6 +9,7 @@ import {
   resolveReportPdfPath,
 } from '../services/reportPdfService.js';
 import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
+import { applySubmissionDisplayNames } from '../services/submissionFileNameService.js';
 
 const finalSchema = z.object({
   final_grade: z.coerce.number().min(0).max(100),
@@ -703,8 +704,25 @@ export async function listResultsByAssignment(req, res) {
     [...access.params, assignmentId]
   );
 
+  const portfolioIds = rows.map((row) => row.portfolio_id).filter(Boolean);
+  let displayRows = rows;
+  if (portfolioIds.length) {
+    const placeholders = portfolioIds.map(() => '?').join(',');
+    const files = await query(
+      `SELECT pf.file_id, pf.portfolio_id, pf.student_no, pf.file_path, pf.original_name,
+              ard.document_name, COALESCE(ard.is_ai_gradable, 0) AS is_ai_gradable
+       FROM portfolio_files pf
+       LEFT JOIN assignment_required_documents ard ON ard.id = pf.required_document_id
+       WHERE pf.portfolio_id IN (${placeholders})
+         AND pf.removed_at IS NULL
+       ORDER BY pf.uploaded_at DESC, pf.file_id DESC`,
+      portfolioIds
+    );
+    displayRows = applySubmissionDisplayNames(rows, files);
+  }
+
   res.json({
-    results: rows.map((row) => ({
+    results: displayRows.map((row) => ({
       ...row,
       final_grade: shouldHideDraftFinalGrade(req, row) ? null : row.final_grade,
       ai_status: row.ai_status || 'pending',
