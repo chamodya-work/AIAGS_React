@@ -4,7 +4,25 @@ import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
 
-const DEPTS = ['Medicine', 'Surgery', 'Pediatrics', 'Obstetrics', 'Community Medicine'];
+const DEPTS = [
+  'Anatomy',
+  'Biochemistry',
+  'Physiology',
+  'Pathology',
+  'Microbiology',
+  'Parasitology',
+  'Pharmacology',
+  'Forensic Medicine',
+  'Medical Education',
+  'Public Health',
+  'Medicine',
+  'Surgery',
+  'Psychiatry',
+  'Paediatrics',
+  'Disability Studies',
+  'Family Medicine',
+  'Gyn & Obs.'
+];
 const REQUIRED_DOC_TYPE_OPTIONS = [
   { value: 'pdf', label: 'PDF' },
   { value: 'docx', label: 'DOCX' },

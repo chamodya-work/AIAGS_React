@@ -22,6 +22,26 @@ const STATUS_BADGE = {
   published_to_student: 'badge-success',
 };
 
+function formatDateTime(dateValue, timeValue) {
+  if (!dateValue) return '-';
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '-';
+  const dateText = date.toLocaleDateString();
+  return timeValue ? `${dateText} ${String(timeValue).slice(0, 5)}` : dateText;
+}
+
+function typeLabel(value) {
+  return String(value || 'pdf_or_docx').replaceAll('_', ' ');
+}
+
+function RequiredBadge({ mandatory }) {
+  return (
+    <span className={`badge ${mandatory ? 'badge-danger' : 'badge-info'}`}>
+      {mandatory ? 'Mandatory' : 'Optional'}
+    </span>
+  );
+}
+
 export default function ViewPortfolioList() {
   const { user } = useAuth();
   const isAdmin = normalizeRole(user?.role) === 'admin';
@@ -32,6 +52,8 @@ export default function ViewPortfolioList() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewSubmission, setViewSubmission] = useState(null);
 
   useEffect(() => {
     Promise.all([api.portfolios.list(), api.assignments.list()])
@@ -60,14 +82,32 @@ export default function ViewPortfolioList() {
     await onAssignmentChange(aId);
   };
 
-  const handleOpenFile = async (portfolio) => {
+  const handleViewSubmission = async (portfolio) => {
+    setError('');
+    setViewLoading(true);
+    try {
+      const data = await api.portfolios.submissionPackage(portfolio.portfolio_id);
+      setViewSubmission(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const handleOpenGuideline = async (assignmentId) => {
     setError('');
     try {
-      if (portfolio.primary_file_id) {
-        await api.portfolios.openFile(portfolio.primary_file_id);
-      } else if (portfolio.portfolio_link) {
-        window.open(portfolio.portfolio_link, '_blank', 'noopener,noreferrer');
-      }
+      await api.assignments.openGuideline(assignmentId);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleOpenFile = async (fileId) => {
+    setError('');
+    try {
+      await api.portfolios.openFile(fileId);
     } catch (err) {
       setError(err.message);
     }
@@ -184,11 +224,13 @@ export default function ViewPortfolioList() {
                       </td>
                       {isAdmin && <td>{p.assigned_lecturer?.label || '-'}</td>}
                       <td>
-                        {(p.primary_file_id || p.portfolio_link) && (
-                          <button className="btn btn-info btn-sm" onClick={() => handleOpenFile(p)}>
-                            View
-                          </button>
-                        )}
+                        <button
+                          className="btn btn-info btn-sm"
+                          onClick={() => handleViewSubmission(p)}
+                          disabled={viewLoading}
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
                   );
@@ -198,6 +240,83 @@ export default function ViewPortfolioList() {
           </div>
         )}
       </div>
+
+      {viewSubmission && (
+        <div className="modal-backdrop" onClick={() => setViewSubmission(null)}>
+          <div className="modal submission-modal portfolio-submission-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Submission Details</h3>
+              <button className="modal-close" onClick={() => setViewSubmission(null)}>x</button>
+            </div>
+
+            <div className="submission-meta">
+              <div><span>Student Number</span><strong>{viewSubmission.student_no || viewSubmission.portfolio?.student_no || '-'}</strong></div>
+              <div><span>Assignment</span><strong>{viewSubmission.assignment?.assignment_name || '-'}</strong></div>
+              <div><span>Course</span><strong>{viewSubmission.assignment?.course_name || '-'}</strong></div>
+              <div><span>Department</span><strong>{viewSubmission.assignment?.department || '-'}</strong></div>
+              <div><span>Batch</span><strong>{viewSubmission.assignment?.batch || '-'}</strong></div>
+              <div><span>Due</span><strong>{formatDateTime(viewSubmission.assignment?.deadline_date, viewSubmission.assignment?.deadline_time)}</strong></div>
+              <div>
+                <span>Submission Status</span>
+                <strong>{viewSubmission.portfolio?.submission_status || '-'}</strong>
+              </div>
+            </div>
+
+            {viewSubmission.assignment?.has_guideline && (
+              <button
+                className="btn btn-info btn-sm"
+                onClick={() => handleOpenGuideline(viewSubmission.assignment.assignment_id)}
+              >
+                View Guideline
+              </button>
+            )}
+
+            <div className={`alert ${viewSubmission.portfolio?.is_complete ? 'alert-success' : 'alert-warning'}`} style={{ marginTop: 14 }}>
+              Upload status: {viewSubmission.portfolio?.is_complete ? 'Complete' : 'Incomplete'}
+              {!viewSubmission.portfolio?.is_complete && viewSubmission.portfolio?.missing_mandatory_documents?.length > 0 && (
+                <span> - Missing: {viewSubmission.portfolio.missing_mandatory_documents.join(', ')}</span>
+              )}
+            </div>
+
+            <div className="submission-groups">
+              {(viewSubmission.groups || []).map((group, index) => {
+                const requirement = group.requirement || {};
+                return (
+                  <div className="submission-group" key={requirement.id || `general-${index}`}>
+                    <div className="submission-group-header">
+                      <div>
+                        <strong>{requirement.document_name || 'Assignment Submission'}</strong>
+                        <span>Allowed: {typeLabel(requirement.allowed_file_type)}</span>
+                      </div>
+                      <div className="submission-badge-row">
+                        {requirement.is_ai_gradable && (
+                          <span className="badge badge-success">Main Answer for AI Grading</span>
+                        )}
+                        <RequiredBadge mandatory={requirement.is_mandatory} />
+                      </div>
+                    </div>
+
+                    {group.files?.length ? (
+                      <div className="submission-file-list">
+                        {group.files.map(file => (
+                          <div className="submission-file-row" key={file.file_id}>
+                            <span>{file.original_name}</span>
+                            <button className="btn btn-info btn-sm" onClick={() => handleOpenFile(file.file_id)}>
+                              View
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="submission-empty">No file uploaded.</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

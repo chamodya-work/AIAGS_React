@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { login, createUser, me, studentHomeAccess } from '../controllers/authController.js';
+import { login, universityLogin, createUser, me, studentHomeAccess } from '../controllers/authController.js';
 import { normalizeRole, requireAuth, requireRole, roleLabel } from '../middleware/auth.js';
 import { query } from '../db.js';
 
 const router = Router();
 
 router.post('/login', login);
+router.post('/university/login', universityLogin);
 router.get('/me', requireAuth, me);
 router.get('/student-home', requireAuth, requireRole('student'), studentHomeAccess);
 
@@ -15,10 +16,17 @@ router.post('/users', requireAuth, requireRole('admin'), createUser);
 router.get('/users', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const rows = await query(
-      `SELECT u.user_id, u.role, u.email, u.display_name, u.created_at,
-              s.student_no, s.full_name, s.batch, s.course_name
+      `SELECT u.user_id, u.university_user_id, u.auth_provider, u.role, u.email,
+              u.display_name, u.email_verified, u.user_type, u.is_active,
+              u.last_login_at, u.last_synced_at, u.local_role_override,
+              u.created_at,
+              s.student_no, s.full_name, s.batch, s.course_name,
+              t.teacher_id, t.staff_id AS teacher_staff_id,
+              a.admin_id, a.staff_id AS admin_staff_id
        FROM users u
        LEFT JOIN students s ON s.user_id = u.user_id
+       LEFT JOIN teachers t ON t.user_id = u.user_id
+       LEFT JOIN administrators a ON a.user_id = u.user_id
        ORDER BY u.created_at DESC`
     );
     res.json({
@@ -55,8 +63,17 @@ router.put('/users/:id', requireAuth, requireRole('admin'), async (req, res) => 
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    await query('UPDATE users SET display_name=?, role=? WHERE user_id=?', [display_name || null, normalizedRole, userId]);
-    const rows = await query('SELECT user_id, role, email, display_name FROM users WHERE user_id=?', [userId]);
+    await query(
+      'UPDATE users SET display_name=?, role=?, local_role_override=1 WHERE user_id=?',
+      [display_name || null, normalizedRole, userId]
+    );
+    const rows = await query(
+      `SELECT user_id, university_user_id, auth_provider, role, email, display_name,
+              user_type, is_active, local_role_override
+       FROM users
+       WHERE user_id=?`,
+      [userId]
+    );
     res.json({
       user: rows[0]
         ? { ...rows[0], role: normalizeRole(rows[0].role), role_label: roleLabel(rows[0].role) }

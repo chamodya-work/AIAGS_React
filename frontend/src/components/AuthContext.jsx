@@ -39,13 +39,21 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const universityLogin = async ({ userType, netId, password }) => {
+    const data = await api.auth.universityLogin({ userType, netId, password });
+    localStorage.setItem('aigs_token', data.token);
+    const u = normalizeUser(data);
+    setUser(u);
+    return data;
+  };
+
   const logout = () => {
     localStorage.removeItem('aigs_token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, universityLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );

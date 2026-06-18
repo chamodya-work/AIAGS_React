@@ -7,11 +7,22 @@ USE aigs;
 -- Unified auth table (not listed in the structure doc, but needed for login)
 CREATE TABLE IF NOT EXISTS users (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
+  university_user_id VARCHAR(255) NULL,
+  auth_provider VARCHAR(50) NOT NULL DEFAULT 'local',
   role ENUM('admin','teacher','student') NOT NULL,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   display_name VARCHAR(255) NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  email_verified TINYINT(1) NOT NULL DEFAULT 0,
+  user_type VARCHAR(50) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at TIMESTAMP NULL DEFAULT NULL,
+  last_synced_at TIMESTAMP NULL DEFAULT NULL,
+  local_role_override TINYINT(1) NOT NULL DEFAULT 0,
+  raw_university_profile LONGTEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_users_university_user_id (university_user_id)
 );
 
 -- Student – AD
@@ -22,26 +33,37 @@ CREATE TABLE IF NOT EXISTS students (
   batch VARCHAR(50) NULL,
   course_name VARCHAR(100) NULL,
   department VARCHAR(100) NULL,
+  faculty VARCHAR(255) NULL,
+  university_email VARCHAR(255) NULL,
+  intake_academic_year VARCHAR(50) NULL,
+  original_batch VARCHAR(50) NULL,
+  contact_mobile VARCHAR(50) NULL,
   CONSTRAINT fk_students_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 -- Teachers – AD
 CREATE TABLE IF NOT EXISTS teachers (
   teacher_id VARCHAR(50) PRIMARY KEY,
+  staff_id VARCHAR(100) NULL,
   user_id INT NULL,
   teacher_mail VARCHAR(255) NULL,
   full_name VARCHAR(255) NULL,
   department VARCHAR(100) NULL,
+  designation VARCHAR(255) NULL,
+  faculty VARCHAR(255) NULL,
+  profile_image VARCHAR(1000) NULL,
   CONSTRAINT fk_teachers_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 -- Administrator
 CREATE TABLE IF NOT EXISTS administrators (
   admin_id VARCHAR(50) PRIMARY KEY,
+  staff_id VARCHAR(100) NULL,
   user_id INT NULL,
   admin_name VARCHAR(255) NULL,
   email VARCHAR(255) NULL,
   department VARCHAR(100) NULL,
+  designation VARCHAR(255) NULL,
   CONSTRAINT fk_admin_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
