@@ -70,6 +70,7 @@ export default function ManualGrading() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -241,6 +242,23 @@ export default function ManualGrading() {
       setError(err.message);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!filters.assignment_id) {
+      setError('Select an assignment before downloading Excel.');
+      return;
+    }
+
+    setExporting(true);
+    setError('');
+    try {
+      await api.manualGrading.downloadExcel(filters.assignment_id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -461,6 +479,13 @@ export default function ManualGrading() {
         )}
 
         <div className="action-row">
+          <button
+            className="btn btn-secondary"
+            onClick={handleDownloadExcel}
+            disabled={exporting || !filters.assignment_id}
+          >
+            {exporting ? 'Downloading...' : 'Download Excel'}
+          </button>
           <button
             className="btn btn-primary"
             onClick={handlePublishAction}

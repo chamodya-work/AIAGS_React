@@ -5,6 +5,7 @@ import { query } from '../db.js';
 import { gradePortfolio } from '../services/mlClient.js';
 import {
   generateAiReportPdf,
+  makeReportDownloadFilename,
   makeReportFilename,
   resolveReportPdfPath,
 } from '../services/reportPdfService.js';
@@ -85,8 +86,8 @@ function formatReportDate(value) {
   return date.toISOString().slice(0, 16).replace('T', ' ');
 }
 
-function sendReportPdf(res, filePath, portfolioId) {
-  return res.download(filePath, makeReportFilename(portfolioId), (err) => {
+function sendReportPdf(res, filePath, studentNo) {
+  return res.download(filePath, makeReportDownloadFilename(studentNo), (err) => {
     if (err && !res.headersSent) {
       res.status(500).json({ error: 'Could not download AI report PDF' });
     }
@@ -548,7 +549,7 @@ export async function getAiReportPdf(req, res) {
   try {
     const existingPath = resolveReportPdfPath(row.ai_report_pdf_path);
     if (existingPath && fs.existsSync(existingPath)) {
-      return sendReportPdf(res, existingPath, portfolioId);
+      return sendReportPdf(res, existingPath, row.student_no);
     }
 
     const pdf = await generateAiReportPdf({
@@ -562,7 +563,7 @@ export async function getAiReportPdf(req, res) {
     });
 
     await query('UPDATE ai_grading SET ai_report_pdf_path=? WHERE portfolio_id=?', [pdf.storedPath, portfolioId]);
-    return sendReportPdf(res, pdf.absolutePath, portfolioId);
+    return sendReportPdf(res, pdf.absolutePath, row.student_no);
   } catch (e) {
     console.error('AI report PDF generation failed:', safeMessage(e));
     return res.status(500).json({

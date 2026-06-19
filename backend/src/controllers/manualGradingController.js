@@ -1,7 +1,11 @@
 import { z } from 'zod';
+import ExcelJS from 'exceljs';
 import { query } from '../db.js';
 import { ensurePortfolioAccess, lecturerPortfolioJoin } from '../services/lecturerAccess.js';
-import { applySubmissionDisplayNames } from '../services/submissionFileNameService.js';
+import {
+  applySubmissionDisplayNames,
+  sanitizeFilenameSegment,
+} from '../services/submissionFileNameService.js';
 
 const saveManualGradeSchema = z.object({
   manual_score: z.preprocess(
@@ -95,6 +99,51 @@ function validateAssignmentId(req) {
     throw badRequest('Invalid assignment id');
   }
   return assignmentId;
+}
+
+function compareStudentNo(a, b) {
+  return String(a.student_no || '').localeCompare(String(b.student_no || ''), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function manualExportFilename(assignmentName) {
+  const safeAssignment = sanitizeFilenameSegment(assignmentName, '');
+  return safeAssignment
+    ? `manual-grading-report_${safeAssignment}.xlsx`
+    : 'manual-grading-report.xlsx';
+}
+
+async function getAssignmentContext(assignmentId) {
+  return (
+    await query(
+      `SELECT assignment_id, assignment_name, course_name, department, batch
+       FROM assignments
+       WHERE assignment_id=?
+       LIMIT 1`,
+      [assignmentId]
+    )
+  )[0] || null;
+}
+
+async function getManualExportRows(req, assignmentId) {
+  const access = lecturerPortfolioJoin(req, 'p');
+  const rows = await query(
+    `SELECT p.portfolio_id, p.student_no, p.upload_date,
+            fg.final_grade, fg.manual_score, fg.manual_remark,
+            fg.saved_by, fg.saved_by_role, fg.saved_at, fg.status,
+            fg.publish_status, fg.submitted_to_head_at, fg.published_at,
+            fg.score_difference_warning, fg.score_difference
+     FROM portfolios p
+     ${access.join}
+     LEFT JOIN final_grading fg ON fg.portfolio_id = p.portfolio_id AND fg.student_no = p.student_no
+     WHERE p.assignment_id=?
+     ORDER BY p.student_no ASC`,
+    [...access.params, assignmentId]
+  );
+
+  return rows.map((row) => manualRow(row, req)).sort(compareStudentNo);
 }
 
 async function getPortfolioGradeContext(portfolioId) {
@@ -248,6 +297,82 @@ export async function listManualResultsByAssignment(req, res) {
     if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
     console.error(e);
     res.status(500).json({ error: 'Failed to load manual grading results' });
+  }
+}
+
+export async function exportManualGradingExcel(req, res) {
+  try {
+    const assignmentId = validateAssignmentId(req);
+    const assignment = await getAssignmentContext(assignmentId);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const rows = await getManualExportRows(req, assignmentId);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'AIAGS';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Manual Grading', {
+      views: [{ state: 'frozen', ySplit: 8 }],
+    });
+
+    worksheet.columns = [
+      { key: 'student_no', width: 22 },
+      { key: 'manual_score', width: 22 },
+      { key: 'lecturer_remark', width: 55 },
+    ];
+
+    worksheet.addRow(['AIAGS Manual Grading Report']);
+    worksheet.mergeCells('A1:C1');
+    worksheet.getCell('A1').font = { bold: true, size: 16 };
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+
+    worksheet.addRow(['Assignment', assignment.assignment_name || '']);
+    worksheet.addRow(['Course', assignment.course_name || '']);
+    worksheet.addRow(['Department', assignment.department || '']);
+    worksheet.addRow(['Batch', assignment.batch || '']);
+    worksheet.addRow(['Generated', new Date().toLocaleString()]);
+    worksheet.addRow([]);
+
+    const header = worksheet.addRow(['Student No', 'Manual/Teacher Score', 'Lecturer Remark']);
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1F4E78' },
+    };
+    header.alignment = { vertical: 'middle', horizontal: 'center' };
+    worksheet.autoFilter = {
+      from: { row: header.number, column: 1 },
+      to: { row: header.number, column: 3 },
+    };
+
+    for (const row of rows) {
+      const score = row.teacher_score ?? row.manual_score ?? '';
+      const remark = row.manual_remark || '';
+      const excelRow = worksheet.addRow([row.student_no || '', score, remark]);
+      excelRow.getCell(2).alignment = { horizontal: 'center' };
+      excelRow.getCell(3).alignment = { wrapText: true, vertical: 'top' };
+    }
+
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD9E2EC' } },
+          left: { style: 'thin', color: { argb: 'FFD9E2EC' } },
+          bottom: { style: 'thin', color: { argb: 'FFD9E2EC' } },
+          right: { style: 'thin', color: { argb: 'FFD9E2EC' } },
+        };
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${manualExportFilename(assignment.assignment_name)}"`);
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
+    console.error(e);
+    res.status(500).json({ error: 'Failed to export manual grading report' });
   }
 }
 

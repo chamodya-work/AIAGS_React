@@ -250,6 +250,11 @@ export const api = {
   manualGrading: {
     resultsByAssignment: (assignmentId) =>
       request(`/api/manual-grading/assignment/${assignmentId}/results`),
+    downloadExcel: (assignmentId) =>
+      downloadAuthorizedFile(
+        `/api/manual-grading/assignment/${assignmentId}/export/excel`,
+        'manual-grading-report.xlsx'
+      ),
     save: (portfolioId, payload) =>
       request(`/api/manual-grading/portfolio/${portfolioId}/save`, {
         method: 'POST',

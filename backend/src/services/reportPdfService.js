@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import { sanitizeFilenameSegment } from './submissionFileNameService.js';
 
 const DEFAULT_REPORT_DIR = path.join('private', 'reports');
 
@@ -68,6 +69,13 @@ export function resolveReportPdfPath(storedPath) {
 
 export function makeReportFilename(portfolioId) {
   return `ai-assignment-evaluation-report-${portfolioId}.pdf`;
+}
+
+export function makeReportDownloadFilename(studentNo) {
+  const safeStudentNo = sanitizeFilenameSegment(studentNo, '');
+  return safeStudentNo
+    ? `${safeStudentNo}_ai-assignment-evaluation-report.pdf`
+    : 'ai-assignment-evaluation-report.pdf';
 }
 
 export async function generateAiReportPdf({
