@@ -242,7 +242,7 @@ export default function GradingPage() {
                   <th>View Portfolio</th>
                   <th>AI Grading Document</th>
                   <th>AI Status</th>
-                  <th>AI Score</th>
+                  {/* <th>AI Score</th> */}
                   <th>AI Report</th>
                   <th>Error</th>
                   {/* <th>Final Score (0-100)</th> */}
@@ -283,7 +283,7 @@ export default function GradingPage() {
                             {aiStatus}
                           </span>
                         </td>
-                        <td className="grading-score-cell">{r.ai_grade ?? '-'}</td>
+                        {/* <td className="grading-score-cell">{r.ai_grade ?? '-'}</td> */}
                         <td>
                           {aiStatus === 'graded' ? (
                             <div className="grading-button-group">

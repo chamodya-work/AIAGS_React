@@ -312,7 +312,7 @@ export default function ManualGrading() {
                   <th>Uploaded Date</th>
                   <th>View Portfolio</th>
                   <th>AI Status</th>
-                  <th>AI Score</th>
+                  {/* <th>AI Score</th> */}
                   <th>AI Report</th>
                   <th>Manual/Teacher Score</th>
                   <th>Lecturer Remark</th>
@@ -359,7 +359,7 @@ export default function ManualGrading() {
                             {aiStatus}
                           </span>
                         </td>
-                        <td>{row.ai_grade ?? '-'}</td>
+                        {/* <td>{row.ai_grade ?? '-'}</td> */}
                         <td>
                           {aiStatus === 'graded' ? (
                             <button className="btn btn-info btn-sm" onClick={() => handleViewReport(row.portfolio_id)}>
@@ -440,7 +440,7 @@ export default function ManualGrading() {
                                 <>
                                   <div className="grading-report-meta">
                                     <span>Student Number: <strong>{rowReport.student_no}</strong></span>
-                                    <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span>
+                                    {/* <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span> */}
                                     {/* <span>Model: <strong>{rowReport.ai_model || '-'}</strong></span> */}
                                   </div>
                                   <pre className="grading-report-text">{rowReport.ai_report_text}</pre>

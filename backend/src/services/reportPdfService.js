@@ -103,7 +103,7 @@ export async function generateAiReportPdf({
     writeMetaLine(doc, 'Assignment', assignmentName);
     writeMetaLine(doc, 'Course', courseName);
     writeMetaLine(doc, 'Generated Date', generatedDate);
-    writeMetaLine(doc, 'AI Score', `${aiScore ?? '-'} / 100`);
+    // writeMetaLine(doc, 'AI Score', `${aiScore ?? '-'} / 100`);
 
     doc.moveDown(0.6);
     writeReportBody(doc, reportText);
