@@ -21,7 +21,7 @@ export function mapCourseNameFromStudentNumber(studentNumber, apiCourse) {
   const byPrefix = {
     ME: 'MBBS',
     OT: 'OT',
-    SHS: 'SHS',
+    SH: 'SHS',
   };
 
   if (byPrefix[prefix]) return byPrefix[prefix];
