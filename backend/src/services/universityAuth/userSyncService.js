@@ -28,9 +28,9 @@ async function findExistingUser(conn, profile) {
 }
 
 async function syncStudent(conn, userId, profile) {
-  console.log('student profile details:', profile);
   const student = profile.student;
   if (!student?.student_no) return;
+  const systemBatch = student.original_batch || student.batch || null;
 
   const [existing] = await conn.execute(
     'SELECT student_no FROM students WHERE student_no=? LIMIT 1',
@@ -46,8 +46,7 @@ async function syncStudent(conn, userId, profile) {
       [
         userId,
         profile.full_name,
-        // student.batch,
-        student.student_no.split('/')[1] || null,
+        systemBatch,
         student.course_name,
         profile.department,
         profile.faculty,
@@ -68,8 +67,7 @@ async function syncStudent(conn, userId, profile) {
         student.student_no,
         userId,
         profile.full_name,
-        // student.batch,
-        student.student_no.split('/')[1] || null,
+        systemBatch,
         student.course_name,
         profile.department,
         profile.faculty,

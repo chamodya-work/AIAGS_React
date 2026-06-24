@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
+import { COURSE_OPTIONS, getAllBatchOptions, getBatchOptionsForCourse, normalizeCourseName } from '../utils/courseBatches';
 
 const AI_STATUS_BADGE = {
   pending: 'badge-warning',
@@ -23,10 +24,6 @@ const PUBLISH_STATUS_BADGE = {
 };
 
 const TABLE_COLUMN_COUNT = 11;
-
-function unique(values) {
-  return [...new Set(values.filter(Boolean))].sort();
-}
 
 function formatDate(value) {
   if (!value) return '-';
@@ -56,7 +53,6 @@ export default function ManualGrading() {
   const [results, setResults] = useState([]);
   const [filters, setFilters] = useState({
     course_name: '',
-    department: '',
     batch: '',
     assignment_id: '',
   });
@@ -70,6 +66,7 @@ export default function ManualGrading() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const [publishing, setPublishing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -80,18 +77,13 @@ export default function ManualGrading() {
       .finally(() => setLoading(false));
   }, []);
 
-  const courses = useMemo(() => unique(assignments.map(a => a.course_name)), [assignments]);
-  const departments = useMemo(() => unique(assignments.map(a => a.department)), [assignments]);
-  const batches = useMemo(() => {
-    const filtered = filters.course_name
-      ? assignments.filter(a => a.course_name === filters.course_name)
-      : assignments;
-    return unique(filtered.map(a => a.batch));
-  }, [assignments, filters.course_name]);
+  const courses = COURSE_OPTIONS;
+  const batches = useMemo(() => (
+    filters.course_name ? getBatchOptionsForCourse(filters.course_name) : getAllBatchOptions()
+  ), [filters.course_name]);
 
   const filteredAssignments = assignments.filter((assignment) => {
-    if (filters.course_name && assignment.course_name !== filters.course_name) return false;
-    if (filters.department && assignment.department !== filters.department) return false;
+    if (filters.course_name && normalizeCourseName(assignment.course_name) !== filters.course_name) return false;
     if (filters.batch && assignment.batch !== filters.batch) return false;
     return true;
   });
@@ -244,6 +236,23 @@ export default function ManualGrading() {
     }
   };
 
+  const handleDownloadExcel = async () => {
+    if (!filters.assignment_id) {
+      setError('Select an assignment before downloading Excel.');
+      return;
+    }
+
+    setExporting(true);
+    setError('');
+    try {
+      await api.manualGrading.downloadExcel(filters.assignment_id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const hasPublishableGrades = results.some((row) => {
     const score = row.manual_score ?? row.teacher_score ?? row.final_grade;
     return score != null
@@ -272,13 +281,6 @@ export default function ManualGrading() {
             <select className="filter-select" value={filters.course_name} onChange={e => updateFilter('course_name', e.target.value)}>
               <option value="">All Courses</option>
               {courses.map(course => <option key={course} value={course}>{course}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label className="filter-label">Department</label>
-            <select className="filter-select" value={filters.department} onChange={e => updateFilter('department', e.target.value)}>
-              <option value="">All Departments</option>
-              {departments.map(dept => <option key={dept} value={dept}>{dept}</option>)}
             </select>
           </div>
           <div className="filter-group">
@@ -312,7 +314,7 @@ export default function ManualGrading() {
                   <th>Uploaded Date</th>
                   <th>View Portfolio</th>
                   <th>AI Status</th>
-                  <th>AI Score</th>
+                  {/* <th>AI Score</th> */}
                   <th>AI Report</th>
                   <th>Manual/Teacher Score</th>
                   <th>Lecturer Remark</th>
@@ -359,7 +361,7 @@ export default function ManualGrading() {
                             {aiStatus}
                           </span>
                         </td>
-                        <td>{row.ai_grade ?? '-'}</td>
+                        {/* <td>{row.ai_grade ?? '-'}</td> */}
                         <td>
                           {aiStatus === 'graded' ? (
                             <button className="btn btn-info btn-sm" onClick={() => handleViewReport(row.portfolio_id)}>
@@ -440,7 +442,7 @@ export default function ManualGrading() {
                                 <>
                                   <div className="grading-report-meta">
                                     <span>Student Number: <strong>{rowReport.student_no}</strong></span>
-                                    <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span>
+                                    {/* <span>AI Score: <strong>{rowReport.ai_grade ?? '-'}</strong></span> */}
                                     {/* <span>Model: <strong>{rowReport.ai_model || '-'}</strong></span> */}
                                   </div>
                                   <pre className="grading-report-text">{rowReport.ai_report_text}</pre>
@@ -461,6 +463,13 @@ export default function ManualGrading() {
         )}
 
         <div className="action-row">
+          <button
+            className="btn btn-secondary"
+            onClick={handleDownloadExcel}
+            disabled={exporting || !filters.assignment_id}
+          >
+            {exporting ? 'Downloading...' : 'Download Excel'}
+          </button>
           <button
             className="btn btn-primary"
             onClick={handlePublishAction}

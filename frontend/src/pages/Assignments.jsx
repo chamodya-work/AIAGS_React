@@ -3,26 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
-
-const DEPTS = [
-  'Anatomy',
-  'Biochemistry',
-  'Physiology',
-  'Pathology',
-  'Microbiology',
-  'Parasitology',
-  'Pharmacology',
-  'Forensic Medicine',
-  'Medical Education',
-  'Public Health',
-  'Medicine',
-  'Surgery',
-  'Psychiatry',
-  'Paediatrics',
-  'Disability Studies',
-  'Family Medicine',
-  'Gyn & Obs.'
-];
+import { COURSE_OPTIONS, getAllBatchOptions, getBatchOptionsForCourse, normalizeCourseName } from '../utils/courseBatches';
 const REQUIRED_DOC_TYPE_OPTIONS = [
   { value: 'pdf', label: 'PDF' },
   { value: 'docx', label: 'DOCX' },
@@ -34,7 +15,6 @@ const REQUIRED_DOC_TYPE_OPTIONS = [
 
 const initialForm = {
   course_name: '',
-  department: '',
   batch: '',
   assignment_name: '',
   remark: '',
@@ -100,7 +80,6 @@ export default function AssignmentsPage() {
   const [requiredDocs, setRequiredDocs] = useState([emptyRequiredDoc(true)]);
   const [listFilters, setListFilters] = useState({
     course_name: '',
-    department: '',
     batch: '',
     search: '',
   });
@@ -110,27 +89,18 @@ export default function AssignmentsPage() {
   const rubricRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([api.courses.list(), api.assignments.list()])
-      .then(([c, a]) => {
-        setCourses(c.courses || []);
+    setCourses(COURSE_OPTIONS);
+    api.assignments.list()
+      .then((a) => {
         setList(a.assignments || []);
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const onCourseChange = async (course_name) => {
+  const onCourseChange = (course_name) => {
     setForm(f => ({ ...f, course_name, batch: '' }));
-    if (course_name) {
-      try {
-        const d = await api.batches.list({ course_name });
-        setBatches(d.batches || []);
-      } catch {
-        setBatches([]);
-      }
-    } else {
-      setBatches([]);
-    }
+    setBatches(course_name ? getBatchOptionsForCourse(course_name) : []);
   };
 
   const updateRequiredDoc = (index, patch) => {
@@ -220,24 +190,19 @@ export default function AssignmentsPage() {
   };
 
   const filteredAssignments = list.filter((assignment) => {
-    const matchesCourse = !listFilters.course_name || assignment.course_name === listFilters.course_name;
-    const matchesDepartment = !listFilters.department
-      || String(assignment.department || '').toLowerCase() === listFilters.department.toLowerCase();
+    const matchesCourse = !listFilters.course_name || normalizeCourseName(assignment.course_name) === listFilters.course_name;
     const matchesBatch = !listFilters.batch || assignment.batch === listFilters.batch;
     const matchesSearch = !listFilters.search
       || String(assignment.assignment_name || '').toLowerCase().includes(listFilters.search.toLowerCase());
-    return matchesCourse && matchesDepartment && matchesBatch && matchesSearch;
+    return matchesCourse && matchesBatch && matchesSearch;
   });
 
-  const filterBatches = [...new Set(list
-    .filter((assignment) => !listFilters.course_name || assignment.course_name === listFilters.course_name)
-    .filter((assignment) => !listFilters.department || String(assignment.department || '').toLowerCase() === listFilters.department.toLowerCase())
-    .map((assignment) => assignment.batch)
-    .filter(Boolean))]
-    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  const filterBatches = listFilters.course_name
+    ? getBatchOptionsForCourse(listFilters.course_name)
+    : getAllBatchOptions();
 
   const clearListFilters = () => {
-    setListFilters({ course_name: '', department: '', batch: '', search: '' });
+    setListFilters({ course_name: '', batch: '', search: '' });
   };
 
   return (
@@ -257,14 +222,6 @@ export default function AssignmentsPage() {
           </div>
 
           <div className="assignment-field">
-            <label>Department</label>
-            <select className="form-select" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-              <option value="">Select Department</option>
-              {DEPTS.map(d => <option key={d}>{d}</option>)}
-            </select>
-          </div>
-
-          <div className="assignment-field assignment-field-full">
             <label>Batch</label>
             <select className="form-select" value={form.batch} onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}>
               <option value="">Select Batch</option>
@@ -428,17 +385,6 @@ export default function AssignmentsPage() {
             </select>
           </div>
           <div className="assignment-field">
-            <label>Department</label>
-            <select
-              className="form-select"
-              value={listFilters.department}
-              onChange={e => setListFilters(f => ({ ...f, department: e.target.value, batch: '' }))}
-            >
-              <option value="">All Departments</option>
-              {DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-          <div className="assignment-field">
             <label>Batch</label>
             <select
               className="form-select"
@@ -471,7 +417,6 @@ export default function AssignmentsPage() {
                 <tr>
                   <th>Batch</th>
                   <th>Course</th>
-                  <th>Department</th>
                   <th>Assignment</th>
                   <th>Due Date/Time</th>
                   <th>Guideline</th>
@@ -482,7 +427,7 @@ export default function AssignmentsPage() {
               <tbody>
                 {filteredAssignments.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
+                    <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
                       No assignments found.
                     </td>
                   </tr>
@@ -490,7 +435,6 @@ export default function AssignmentsPage() {
                   <tr key={a.assignment_id}>
                     <td>{a.batch}</td>
                     <td>{a.course_name}</td>
-                    <td>{a.department || '-'}</td>
                     <td>{a.assignment_name}</td>
                     <td>{formatDateTime(a.deadline_date, a.deadline_time)}</td>
                     <td>

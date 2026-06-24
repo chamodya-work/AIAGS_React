@@ -22,6 +22,7 @@ export function mapCourseNameFromStudentNumber(studentNumber, apiCourse) {
     ME: 'MBBS',
     OT: 'OT',
     SHS: 'SHS',
+    SH: 'SHS',
   };
 
   if (byPrefix[prefix]) return byPrefix[prefix];

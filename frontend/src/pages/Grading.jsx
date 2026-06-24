@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
+import { COURSE_OPTIONS, getBatchOptionsForCourse } from '../utils/courseBatches';
 
 const AI_STATUS_BADGE = {
   pending: 'badge-warning',
@@ -36,17 +37,12 @@ export default function GradingPage() {
   const [pdfDownloading, setPdfDownloading] = useState(null);
 
   useEffect(() => {
-    api.courses.list()
-      .then(d => setCourses(d.courses || []))
-      .catch(err => setError(err.message));
+    setCourses(COURSE_OPTIONS);
   }, []);
 
-  const onCourseChange = async (cn) => {
+  const onCourseChange = (cn) => {
     setSelCourse(cn); setSelBatch(''); setSelAssignment(''); setResults([]); setRubric(null); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
-    if (cn) {
-      try { const d = await api.batches.list({ course_name: cn }); setBatches(d.batches || []); }
-      catch { setBatches([]); }
-    }
+    setBatches(cn ? getBatchOptionsForCourse(cn) : []);
   };
 
   const onBatchChange = async (batch) => {
@@ -242,7 +238,7 @@ export default function GradingPage() {
                   <th>View Portfolio</th>
                   <th>AI Grading Document</th>
                   <th>AI Status</th>
-                  <th>AI Score</th>
+                  {/* <th>AI Score</th> */}
                   <th>AI Report</th>
                   <th>Error</th>
                   {/* <th>Final Score (0-100)</th> */}
@@ -283,7 +279,7 @@ export default function GradingPage() {
                             {aiStatus}
                           </span>
                         </td>
-                        <td className="grading-score-cell">{r.ai_grade ?? '-'}</td>
+                        {/* <td className="grading-score-cell">{r.ai_grade ?? '-'}</td> */}
                         <td>
                           {aiStatus === 'graded' ? (
                             <div className="grading-button-group">
@@ -372,9 +368,9 @@ export default function GradingPage() {
 
         {isAdmin && (
           <div className="action-row">
-            <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
+            {/* <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
               {publishing ? 'Publishing...' : 'PUBLISH GRADES TO STUDENTS'}
-            </button>
+            </button> */}
           </div>
         )}
       </div>

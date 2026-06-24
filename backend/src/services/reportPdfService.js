@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import { sanitizeFilenameSegment } from './submissionFileNameService.js';
 
 const DEFAULT_REPORT_DIR = path.join('private', 'reports');
 
@@ -70,6 +71,13 @@ export function makeReportFilename(portfolioId) {
   return `ai-assignment-evaluation-report-${portfolioId}.pdf`;
 }
 
+export function makeReportDownloadFilename(studentNo) {
+  const safeStudentNo = sanitizeFilenameSegment(studentNo, '');
+  return safeStudentNo
+    ? `${safeStudentNo}_ai-assignment-evaluation-report.pdf`
+    : 'ai-assignment-evaluation-report.pdf';
+}
+
 export async function generateAiReportPdf({
   portfolioId,
   studentNo,
@@ -103,7 +111,7 @@ export async function generateAiReportPdf({
     writeMetaLine(doc, 'Assignment', assignmentName);
     writeMetaLine(doc, 'Course', courseName);
     writeMetaLine(doc, 'Generated Date', generatedDate);
-    writeMetaLine(doc, 'AI Score', `${aiScore ?? '-'} / 100`);
+    // writeMetaLine(doc, 'AI Score', `${aiScore ?? '-'} / 100`);
 
     doc.moveDown(0.6);
     writeReportBody(doc, reportText);

@@ -168,7 +168,7 @@ export default function ViewPortfolioList() {
                   <th>Submission Status</th>
                   <th>Main Answer</th>
                   <th>AI Status</th>
-                  <th>AI Score</th>
+                  {/* <th>AI Score</th> */}
                   <th>Manual/Teacher Score</th>
                   <th>Lecturer Remark</th>
                   <th>Final Published Score</th>
@@ -203,7 +203,7 @@ export default function ViewPortfolioList() {
                           {p.ai_status || 'pending'}
                         </span>
                       </td>
-                      <td style={{ fontWeight: 700, color: '#2196F3' }}>{p.ai_grade ?? '-'}</td>
+                      {/* <td style={{ fontWeight: 700, color: '#2196F3' }}>{p.ai_grade ?? '-'}</td> */}
                       <td style={{ fontWeight: 700, color: draftHidden ? '#777' : '#27ae60' }}>
                         {draftHidden ? (
                           <span className="manual-not-submitted">{p.manual_remark_display || 'Not submitted by lecturer yet'}</span>
@@ -253,7 +253,6 @@ export default function ViewPortfolioList() {
               <div><span>Student Number</span><strong>{viewSubmission.student_no || viewSubmission.portfolio?.student_no || '-'}</strong></div>
               <div><span>Assignment</span><strong>{viewSubmission.assignment?.assignment_name || '-'}</strong></div>
               <div><span>Course</span><strong>{viewSubmission.assignment?.course_name || '-'}</strong></div>
-              <div><span>Department</span><strong>{viewSubmission.assignment?.department || '-'}</strong></div>
               <div><span>Batch</span><strong>{viewSubmission.assignment?.batch || '-'}</strong></div>
               <div><span>Due</span><strong>{formatDateTime(viewSubmission.assignment?.deadline_date, viewSubmission.assignment?.deadline_time)}</strong></div>
               <div>

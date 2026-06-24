@@ -3,6 +3,7 @@ import path from 'path';
 import { pool, query } from '../db.js';
 import { ensurePortfolioAccess } from '../services/lecturerAccess.js';
 import { assertSubmissionOpen, getDeadlineInfo } from '../services/deadlineService.js';
+import { normalizeCourseName } from '../services/courseBatchService.js';
 import {
   formatSubmissionDisplayName,
   safeContentDispositionFilename,
@@ -157,10 +158,7 @@ function studentIdentifiers(student) {
 function matchesStudentProfile(assignment, student) {
   if (!student) return false;
   if (student.batch && assignment.batch !== student.batch) return false;
-  if (student.course_name && assignment.course_name !== student.course_name) return false;
-  if (student.department && assignment.department && String(assignment.department).toLowerCase() !== String(student.department).toLowerCase()) {
-    return false;
-  }
+  if (student.course_name && normalizeCourseName(assignment.course_name) !== normalizeCourseName(student.course_name)) return false;
   return true;
 }
 

@@ -115,7 +115,7 @@ export const api = {
     list: () => request('/api/courses'),
   },
 
-  // GET /api/batches?course_name=X  → { batches: ["2023","2024",...] }  (plain strings)
+  // GET /api/batches?course_name=X  -> { batches: ["30","31",...] }  (plain strings)
   batches: {
     list: ({ course_name } = {}) =>
       request(`/api/batches${course_name ? `?course_name=${encodeURIComponent(course_name)}` : ''}`),
@@ -250,6 +250,11 @@ export const api = {
   manualGrading: {
     resultsByAssignment: (assignmentId) =>
       request(`/api/manual-grading/assignment/${assignmentId}/results`),
+    downloadExcel: (assignmentId) =>
+      downloadAuthorizedFile(
+        `/api/manual-grading/assignment/${assignmentId}/export/excel`,
+        'manual-grading-report.xlsx'
+      ),
     save: (portfolioId, payload) =>
       request(`/api/manual-grading/portfolio/${portfolioId}/save`, {
         method: 'POST',

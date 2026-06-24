@@ -21,6 +21,7 @@ const migrationPaths = [
   path.join(__dirname, 'step9_assignment_notifications_migration.sql'),
   path.join(__dirname, 'step11_ai_gradable_required_documents_migration.sql'),
   path.join(__dirname, 'step12_university_auth_migration.sql'),
+  path.join(__dirname, 'step13_original_batch_assignment_workflow_migration.sql'),
 ];
 
 const schemaSql = await fs.readFile(schemaPath, 'utf8');

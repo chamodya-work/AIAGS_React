@@ -1,26 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/api';
-
-const DEPTS = [
-  'Anatomy',
-  'Biochemistry',
-  'Physiology',
-  'Pathology',
-  'Microbiology',
-  'Parasitology',
-  'Pharmacology',
-  'Forensic Medicine',
-  'Medical Education',
-  'Public Health',
-  'Medicine',
-  'Surgery',
-  'Psychiatry',
-  'Paediatrics',
-  'Disability Studies',
-  'Family Medicine',
-  'Gyn & Obs.'
-];
+import { COURSE_OPTIONS, getBatchOptionsForCourse } from '../utils/courseBatches';
 
 function datePart(value) {
   return value ? String(value).slice(0, 10) : '';
@@ -41,7 +22,6 @@ export default function EditAssignment() {
   const [success, setSuccess] = useState('');
 
   const [form, setForm] = useState({
-    department: '',
     course_name: '',
     batch: '',
     assignment_name: '',
@@ -53,12 +33,11 @@ export default function EditAssignment() {
   });
 
   useEffect(() => {
-    Promise.all([api.courses.list(), api.assignments.get(id)])
-      .then(async ([c, a]) => {
-        setCourses(c.courses || []);
+    setCourses(COURSE_OPTIONS);
+    api.assignments.get(id)
+      .then((a) => {
         const asgn = a.assignment || a;
         setForm({
-          department: asgn.department || '',
           course_name: asgn.course_name || '',
           batch: asgn.batch || '',
           assignment_name: asgn.assignment_name || '',
@@ -68,10 +47,7 @@ export default function EditAssignment() {
           deadline_date: datePart(asgn.deadline_date),
           deadline_time: timePart(asgn.deadline_time),
         });
-        if (asgn.course_name) {
-          const d = await api.batches.list({ course_name: asgn.course_name });
-          setBatches(d.batches || []);
-        }
+        setBatches(asgn.course_name ? getBatchOptionsForCourse(asgn.course_name) : []);
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -116,7 +92,7 @@ export default function EditAssignment() {
       <div className="content-card assignment-form-card">
         <div className="assignment-form-grid">
           <div className="alert alert-info assignment-field-full">
-            Course, department, batch, rubric, guideline, and required document definitions are locked after assignment creation.
+            Course, batch, rubric, guideline, and required document definitions are locked after assignment creation.
           </div>
 
           <div className="assignment-field">
@@ -128,14 +104,6 @@ export default function EditAssignment() {
           </div>
 
           <div className="assignment-field">
-            <label>Department</label>
-            <select className="form-select" value={form.department} disabled>
-              <option value="">Select Department</option>
-              {DEPTS.map(d => <option key={d}>{d}</option>)}
-            </select>
-          </div>
-
-          <div className="assignment-field assignment-field-full">
             <label>Batch</label>
             <select className="form-select" value={form.batch} disabled>
               <option value="">Select Batch</option>
