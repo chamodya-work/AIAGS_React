@@ -253,7 +253,6 @@ export default function ViewPortfolioList() {
               <div><span>Student Number</span><strong>{viewSubmission.student_no || viewSubmission.portfolio?.student_no || '-'}</strong></div>
               <div><span>Assignment</span><strong>{viewSubmission.assignment?.assignment_name || '-'}</strong></div>
               <div><span>Course</span><strong>{viewSubmission.assignment?.course_name || '-'}</strong></div>
-              <div><span>Department</span><strong>{viewSubmission.assignment?.department || '-'}</strong></div>
               <div><span>Batch</span><strong>{viewSubmission.assignment?.batch || '-'}</strong></div>
               <div><span>Due</span><strong>{formatDateTime(viewSubmission.assignment?.deadline_date, viewSubmission.assignment?.deadline_time)}</strong></div>
               <div>

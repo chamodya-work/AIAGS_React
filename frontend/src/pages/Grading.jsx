@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
+import { COURSE_OPTIONS, getBatchOptionsForCourse } from '../utils/courseBatches';
 
 const AI_STATUS_BADGE = {
   pending: 'badge-warning',
@@ -36,17 +37,12 @@ export default function GradingPage() {
   const [pdfDownloading, setPdfDownloading] = useState(null);
 
   useEffect(() => {
-    api.courses.list()
-      .then(d => setCourses(d.courses || []))
-      .catch(err => setError(err.message));
+    setCourses(COURSE_OPTIONS);
   }, []);
 
-  const onCourseChange = async (cn) => {
+  const onCourseChange = (cn) => {
     setSelCourse(cn); setSelBatch(''); setSelAssignment(''); setResults([]); setRubric(null); setOpenReportId(null); setReportsByPortfolio({}); setReportErrorsByPortfolio({}); setReportLoadingByPortfolio({});
-    if (cn) {
-      try { const d = await api.batches.list({ course_name: cn }); setBatches(d.batches || []); }
-      catch { setBatches([]); }
-    }
+    setBatches(cn ? getBatchOptionsForCourse(cn) : []);
   };
 
   const onBatchChange = async (batch) => {
@@ -372,9 +368,9 @@ export default function GradingPage() {
 
         {isAdmin && (
           <div className="action-row">
-            <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
+            {/* <button className="btn btn-primary" onClick={handlePublish} disabled={publishing || !selAssignment || results.length === 0}>
               {publishing ? 'Publishing...' : 'PUBLISH GRADES TO STUDENTS'}
-            </button>
+            </button> */}
           </div>
         )}
       </div>

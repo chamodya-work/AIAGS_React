@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
+import { COURSE_OPTIONS, getAllBatchOptions, getBatchOptionsForCourse, normalizeCourseName } from '../utils/courseBatches';
 
 const AI_STATUS_BADGE = {
   pending: 'badge-warning',
@@ -23,10 +24,6 @@ const PUBLISH_STATUS_BADGE = {
 };
 
 const TABLE_COLUMN_COUNT = 11;
-
-function unique(values) {
-  return [...new Set(values.filter(Boolean))].sort();
-}
 
 function formatDate(value) {
   if (!value) return '-';
@@ -56,7 +53,6 @@ export default function ManualGrading() {
   const [results, setResults] = useState([]);
   const [filters, setFilters] = useState({
     course_name: '',
-    department: '',
     batch: '',
     assignment_id: '',
   });
@@ -81,18 +77,13 @@ export default function ManualGrading() {
       .finally(() => setLoading(false));
   }, []);
 
-  const courses = useMemo(() => unique(assignments.map(a => a.course_name)), [assignments]);
-  const departments = useMemo(() => unique(assignments.map(a => a.department)), [assignments]);
-  const batches = useMemo(() => {
-    const filtered = filters.course_name
-      ? assignments.filter(a => a.course_name === filters.course_name)
-      : assignments;
-    return unique(filtered.map(a => a.batch));
-  }, [assignments, filters.course_name]);
+  const courses = COURSE_OPTIONS;
+  const batches = useMemo(() => (
+    filters.course_name ? getBatchOptionsForCourse(filters.course_name) : getAllBatchOptions()
+  ), [filters.course_name]);
 
   const filteredAssignments = assignments.filter((assignment) => {
-    if (filters.course_name && assignment.course_name !== filters.course_name) return false;
-    if (filters.department && assignment.department !== filters.department) return false;
+    if (filters.course_name && normalizeCourseName(assignment.course_name) !== filters.course_name) return false;
     if (filters.batch && assignment.batch !== filters.batch) return false;
     return true;
   });
@@ -290,13 +281,6 @@ export default function ManualGrading() {
             <select className="filter-select" value={filters.course_name} onChange={e => updateFilter('course_name', e.target.value)}>
               <option value="">All Courses</option>
               {courses.map(course => <option key={course} value={course}>{course}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label className="filter-label">Department</label>
-            <select className="filter-select" value={filters.department} onChange={e => updateFilter('department', e.target.value)}>
-              <option value="">All Departments</option>
-              {departments.map(dept => <option key={dept} value={dept}>{dept}</option>)}
             </select>
           </div>
           <div className="filter-group">

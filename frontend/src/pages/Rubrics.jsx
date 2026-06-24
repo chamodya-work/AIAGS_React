@@ -2,11 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/api';
 import { useAuth } from '../components/AuthContext';
 import { normalizeRole } from '../utils/roles';
-
-function uniqueValues(rows, key) {
-  return [...new Set(rows.map(row => row?.[key]).filter(Boolean))]
-    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
-}
+import { COURSE_OPTIONS, getAllBatchOptions, getBatchOptionsForCourse, normalizeCourseName } from '../utils/courseBatches';
 
 function uniqueAssignments(rows) {
   const byId = new Map();
@@ -37,7 +33,6 @@ export default function RubricsPage() {
   const [rubrics, setRubrics] = useState([]);
   const [filters, setFilters] = useState({
     course_name: '',
-    department: '',
     batch: '',
     assignment_id: '',
   });
@@ -45,32 +40,17 @@ export default function RubricsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const courseOptions = useMemo(() => uniqueValues(assignments, 'course_name'), [assignments]);
-
-  const departmentOptions = useMemo(() => (
-    uniqueValues(
-      assignments.filter(row => !filters.course_name || row.course_name === filters.course_name),
-      'department'
-    )
-  ), [assignments, filters.course_name]);
-
+  const courseOptions = COURSE_OPTIONS;
   const batchOptions = useMemo(() => (
-    uniqueValues(
-      assignments.filter(row => (
-        (!filters.course_name || row.course_name === filters.course_name) &&
-        (!filters.department || String(row.department || '').toLowerCase() === filters.department.toLowerCase())
-      )),
-      'batch'
-    )
-  ), [assignments, filters.course_name, filters.department]);
+    filters.course_name ? getBatchOptionsForCourse(filters.course_name) : getAllBatchOptions()
+  ), [filters.course_name]);
 
   const assignmentOptions = useMemo(() => (
     uniqueAssignments(assignments.filter(row => (
-      (!filters.course_name || row.course_name === filters.course_name) &&
-      (!filters.department || String(row.department || '').toLowerCase() === filters.department.toLowerCase()) &&
+      (!filters.course_name || normalizeCourseName(row.course_name) === filters.course_name) &&
       (!filters.batch || row.batch === filters.batch)
     )))
-  ), [assignments, filters.course_name, filters.department, filters.batch]);
+  ), [assignments, filters.course_name, filters.batch]);
 
   const loadRubrics = async (nextFilters = filters) => {
     setLoading(true);
@@ -100,7 +80,6 @@ export default function RubricsPage() {
               assignment_id: rubric.assignment_id,
               assignment_name: rubric.assignment_name,
               course_name: rubric.course_name,
-              department: rubric.department,
               batch: rubric.batch,
             }))
         );
@@ -122,7 +101,7 @@ export default function RubricsPage() {
   };
 
   const clearFilters = () => {
-    const next = { course_name: '', department: '', batch: '', assignment_id: '' };
+    const next = { course_name: '', batch: '', assignment_id: '' };
     setFilters(next);
     loadRubrics(next);
   };
@@ -163,7 +142,6 @@ export default function RubricsPage() {
             value={filters.course_name}
             onChange={e => updateFilter({
               course_name: e.target.value,
-              department: '',
               batch: '',
               assignment_id: '',
             })}
@@ -172,24 +150,6 @@ export default function RubricsPage() {
             {courseOptions.map(course => <option key={course} value={course}>{course}</option>)}
           </select>
 
-          <label className="form-label">Department:</label>
-          <select
-            className="form-select"
-            value={filters.department}
-            onChange={e => updateFilter({
-              department: e.target.value,
-              batch: '',
-              assignment_id: '',
-            })}
-          >
-            <option value="">All Departments</option>
-            {departmentOptions.map(department => (
-              <option key={department} value={department}>{department}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-row">
           <label className="form-label">Batch:</label>
           <select
             className="form-select"
@@ -228,13 +188,12 @@ export default function RubricsPage() {
           <div className="spinner-wrap"><div className="spinner" /></div>
         ) : (
           <div className="table-container">
-            <table className="data-table" style={{ minWidth: 1100 }}>
+            <table className="data-table" style={{ minWidth: 1000 }}>
               <thead>
                 <tr>
                   <th>Rubric</th>
                   <th>Assignment</th>
                   <th>Course</th>
-                  <th>Department</th>
                   <th>Batch</th>
                   <th>File Type</th>
                   <th>Uploaded Date</th>
@@ -245,7 +204,7 @@ export default function RubricsPage() {
               <tbody>
                 {rubrics.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: '#999', padding: '32px' }}>
                       No rubrics found.
                     </td>
                   </tr>
@@ -259,7 +218,6 @@ export default function RubricsPage() {
                     </td>
                     <td>{rubric.assignment_name || '-'}</td>
                     <td>{rubric.course_name || '-'}</td>
-                    <td>{rubric.department || '-'}</td>
                     <td>{rubric.batch || '-'}</td>
                     <td>{rubric.file_type || '-'}</td>
                     <td>{formatDate(rubric.create_date)}</td>

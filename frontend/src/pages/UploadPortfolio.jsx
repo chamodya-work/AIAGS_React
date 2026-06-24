@@ -1,25 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/api';
-
-const DEPARTMENT_FALLBACK = [
-  'Anatomy',
-  'Biochemistry',
-  'Physiology',
-  'Pathology',
-  'Microbiology',
-  'Parasitology',
-  'Pharmacology',
-  'Forensic Medicine',
-  'Medical Education',
-  'Public Health',
-  'Medicine',
-  'Surgery',
-  'Psychiatry',
-  'Paediatrics',
-  'Disability Studies',
-  'Family Medicine',
-  'Gyn & Obs.',
-];
+import { COURSE_OPTIONS, getBatchOptionsForCourse } from '../utils/courseBatches';
 
 const ACCEPT_BY_TYPE = {
   pdf: '.pdf',
@@ -32,11 +13,6 @@ const ACCEPT_BY_TYPE = {
 
 function cleanParams(params) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value));
-}
-
-function uniqueValues(rows, key) {
-  return [...new Set(rows.map(row => row?.[key]).filter(Boolean))]
-    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
 }
 
 function fileNameFromPath(value) {
@@ -90,12 +66,10 @@ function clearLoadedFiles(submission) {
 
 export default function UploadPortfolio() {
   const [courses, setCourses] = useState([]);
-  const [departments, setDepartments] = useState([]);
   const [batches, setBatches] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [selCourse, setSelCourse] = useState('');
-  const [selDepartment, setSelDepartment] = useState('');
   const [selBatch, setSelBatch] = useState('');
   const [selAssignment, setSelAssignment] = useState('');
   const [studentNo, setStudentNo] = useState('');
@@ -108,9 +82,7 @@ export default function UploadPortfolio() {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    api.courses.list()
-      .then(d => setCourses(d.courses || []))
-      .catch(err => setError(err.message));
+    setCourses(COURSE_OPTIONS);
   }, []);
 
   const loadSubmissions = async (assignmentId) => {
@@ -153,48 +125,12 @@ export default function UploadPortfolio() {
 
   const onCourseChange = async (courseName) => {
     setSelCourse(courseName);
-    setSelDepartment('');
     setSelBatch('');
     setSelAssignment('');
     setAssignments([]);
     setSubmissions([]);
     setSubmission(null);
-    setDepartments([]);
-    setBatches([]);
-
-    if (!courseName) return;
-
-    try {
-      const [departmentData, batchData] = await Promise.all([
-        api.departments.list({ course_name: courseName }),
-        api.batches.list({ course_name: courseName }),
-      ]);
-      const loadedDepartments = departmentData.departments || [];
-      setDepartments(loadedDepartments.length ? loadedDepartments : DEPARTMENT_FALLBACK);
-      setBatches(batchData.batches || []);
-    } catch (err) {
-      setDepartments(DEPARTMENT_FALLBACK);
-      setBatches([]);
-      setError(err.message);
-    }
-  };
-
-  const onDepartmentChange = async (department) => {
-    setSelDepartment(department);
-    setSelBatch('');
-    setSelAssignment('');
-    setAssignments([]);
-    setSubmissions([]);
-    setSubmission(null);
-
-    if (!selCourse) return;
-
-    try {
-      const data = await api.assignments.list(cleanParams({ course_name: selCourse, department }));
-      setBatches(uniqueValues(data.assignments || [], 'batch'));
-    } catch {
-      setBatches([]);
-    }
+    setBatches(courseName ? getBatchOptionsForCourse(courseName) : []);
   };
 
   const onBatchChange = async (batch) => {
@@ -207,7 +143,6 @@ export default function UploadPortfolio() {
       try {
         const data = await api.assignments.list(cleanParams({
           course_name: selCourse,
-          department: selDepartment,
           batch,
         }));
         setAssignments(data.assignments || []);
@@ -362,21 +297,6 @@ export default function UploadPortfolio() {
             {courses.map(course => <option key={course} value={course}>{course}</option>)}
           </select>
 
-          <label className="form-label">Department:</label>
-          <select
-            className="form-select"
-            value={selDepartment}
-            onChange={e => onDepartmentChange(e.target.value)}
-            disabled={!selCourse}
-          >
-            <option value="">Select Department</option>
-            {departments.map(department => (
-              <option key={department} value={department}>{department}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-row">
           <label className="form-label">Batch:</label>
           <select
             className="form-select"
