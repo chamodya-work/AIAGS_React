@@ -48,7 +48,7 @@ export function normalizeStudentProfile(raw, netId) {
   const email = pickPreferredEmail(raw?.studentEmail, { fallbackNetId: netId, fallbackDomain: 'stu.kln.ac.lk' });
   const faculty = process.env.UNIVERSITY_DEFAULT_FACULTY || 'Faculty of Medicine';
   const department = process.env.UNIVERSITY_DEFAULT_STUDENT_DEPARTMENT || 'Medicine';
-  const batch = cleanText(raw?.intakeAcademicYear) || cleanText(raw?.Originalbatch) || null;
+  const originalBatch = cleanText(raw?.Originalbatch) || null;
   const courseName = mapCourseNameFromStudentNumber(studentNo, raw?.course);
 
   return {
@@ -65,9 +65,9 @@ export function normalizeStudentProfile(raw, netId) {
     email_verified: Boolean(email),
     student: {
       student_no: studentNo,
-      batch,
+      batch: originalBatch,
       course_name: courseName,
-      original_batch: cleanText(raw?.Originalbatch) || null,
+      original_batch: originalBatch,
       intake_academic_year: cleanText(raw?.intakeAcademicYear) || null,
       contact_mobile: cleanText(raw?.contactMobile) || null,
     },
