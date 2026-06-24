@@ -1,5 +1,6 @@
 import { query } from "../db.js";
 import { getDeadlineInfo } from "../services/deadlineService.js";
+import { normalizeCourseName } from "../services/courseBatchService.js";
 
 function toDateOnly(value) {
   if (!value) return null;
@@ -94,8 +95,7 @@ export async function getMyDashboard(req, res) {
          ) latest ON latest.portfolio_id = p1.portfolio_id
        ) p ON p.assignment_id = a.assignment_id
        WHERE (? IS NULL OR ? = '' OR a.batch = ?)
-         AND (? IS NULL OR ? = '' OR a.course_name = ?)
-         AND (? IS NULL OR ? = '' OR a.department IS NULL OR LOWER(a.department) = LOWER(?))
+         AND (? IS NULL OR ? = '' OR UPPER(a.course_name) = ?)
        ORDER BY a.deadline_date ASC, a.assignment_id DESC`,
       [
         student.student_no,
@@ -105,10 +105,7 @@ export async function getMyDashboard(req, res) {
         student.batch,
         student.course_name,
         student.course_name,
-        student.course_name,
-        student.department,
-        student.department,
-        student.department,
+        normalizeCourseName(student.course_name),
       ]
     );
 

@@ -1,11 +1,15 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { query } from "../db.js";
+import {
+    DEFAULT_COURSES,
+    getAllDefaultBatchOptions,
+    getBatchOptionsForCourse,
+    normalizeCourseName,
+} from "../services/courseBatchService.js";
 
 const router = Router();
 
-const DEFAULT_COURSES = ["MBBS", "SHS", "OT"];
-const DEFAULT_BATCHES = ["2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"];
 const DEFAULT_DEPARTMENTS = [
     "Anatomy",
     "Biochemistry",
@@ -54,23 +58,24 @@ function mergeWithDefaults(defaults, rows) {
 
 // GET /api/courses
 router.get("/courses", requireAuth, requireRole("admin", "teacher"), async (req, res) => {
-    const rows = await query(
-        "SELECT DISTINCT course_name FROM assignments WHERE course_name IS NOT NULL AND course_name <> '' ORDER BY course_name"
-    );
-    res.json({ courses: mergeWithDefaults(DEFAULT_COURSES, rows.map(r => r.course_name)) });
+    res.json({ courses: DEFAULT_COURSES });
 });
 
 // GET /api/batches?course_name=MBBS
 router.get("/batches", requireAuth, requireRole("admin", "teacher"), async (req, res) => {
-    const { course_name } = req.query;
+    const courseName = normalizeCourseName(req.query.course_name || req.query.course);
+    const defaults = courseName ? getBatchOptionsForCourse(courseName) : getAllDefaultBatchOptions();
 
     let sql = "SELECT DISTINCT batch FROM assignments WHERE 1=1";
     const params = [];
-    if (course_name) { sql += " AND course_name=?"; params.push(course_name); }
+    if (courseName) { sql += " AND UPPER(course_name)=?"; params.push(courseName); }
     sql += " ORDER BY batch DESC";
 
     const rows = await query(sql, params);
-    res.json({ batches: mergeWithDefaults(DEFAULT_BATCHES, rows.map(r => r.batch)) });
+    const dbBatches = rows
+        .map(r => String(r.batch || "").trim())
+        .filter((batch) => !courseName || defaults.includes(batch));
+    res.json({ batches: mergeWithDefaults(defaults, dbBatches) });
 });
 
 // GET /api/departments?course_name=MBBS&batch=2024

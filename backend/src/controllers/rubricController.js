@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { query } from '../db.js';
 import fs from 'fs';
 import path from 'path';
+import { normalizeCourseName } from '../services/courseBatchService.js';
 
 const rubricSchema = z.object({
   rubric_name: z.string().min(1),
@@ -89,7 +90,7 @@ function rubricListSql(req, extraWhere = '') {
 
 export async function listRubrics(req, res) {
   try {
-    const { assignment_id, course_name, department, batch } = req.query;
+    const { assignment_id, course_name, batch } = req.query;
     const where = [];
     const filterParams = [];
 
@@ -98,12 +99,8 @@ export async function listRubrics(req, res) {
       filterParams.push(Number(assignment_id));
     }
     if (course_name) {
-      where.push('AND a.course_name = ?');
-      filterParams.push(String(course_name));
-    }
-    if (department) {
-      where.push('AND LOWER(a.department) = LOWER(?)');
-      filterParams.push(String(department));
+      where.push('AND UPPER(a.course_name) = ?');
+      filterParams.push(normalizeCourseName(course_name));
     }
     if (batch) {
       where.push('AND a.batch = ?');

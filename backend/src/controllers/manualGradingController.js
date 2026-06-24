@@ -312,7 +312,7 @@ export async function exportManualGradingExcel(req, res) {
     workbook.created = new Date();
 
     const worksheet = workbook.addWorksheet('Manual Grading', {
-      views: [{ state: 'frozen', ySplit: 8 }],
+      views: [{ state: 'frozen', ySplit: 7 }],
     });
 
     worksheet.columns = [
@@ -328,7 +328,6 @@ export async function exportManualGradingExcel(req, res) {
 
     worksheet.addRow(['Assignment', assignment.assignment_name || '']);
     worksheet.addRow(['Course', assignment.course_name || '']);
-    worksheet.addRow(['Department', assignment.department || '']);
     worksheet.addRow(['Batch', assignment.batch || '']);
     worksheet.addRow(['Generated', new Date().toLocaleString()]);
     worksheet.addRow([]);

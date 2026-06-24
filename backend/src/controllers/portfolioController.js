@@ -472,7 +472,10 @@ export async function uploadPortfolio(req, res) {
     // ensure student exists (create on the fly if not present)
     const student = (await query('SELECT student_no FROM students WHERE student_no=?', [studentNo]))[0];
     if (!student) {
-      await query('INSERT INTO students (student_no) VALUES (?)', [studentNo]);
+      await query(
+        'INSERT INTO students (student_no, batch, original_batch, course_name) VALUES (?,?,?,?)',
+        [studentNo, assignment.batch || null, assignment.batch || null, assignment.course_name || null]
+      );
     }
 
     conn = await pool.getConnection();

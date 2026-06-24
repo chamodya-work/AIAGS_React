@@ -3,6 +3,11 @@ import path from 'path';
 import { pool, query } from '../db.js';
 import { getDeadlineInfo } from '../services/deadlineService.js';
 import { sendAssignmentCreatedNotifications } from '../services/assignmentNotificationService.js';
+import {
+  DEFAULT_COURSES,
+  isValidCourseBatch,
+  normalizeCourseName,
+} from '../services/courseBatchService.js';
 
 const REQUIRED_DOC_TYPES = new Set([
   'pdf',
@@ -143,11 +148,12 @@ function parseRequiredDocuments(input) {
 }
 
 function parseCreatePayload(body) {
+  const courseName = normalizeCourseName(body.course_name);
   const data = {
     assignment_name: text(body.assignment_name),
     batch: text(body.batch),
-    course_name: text(body.course_name),
-    department: nullableText(body.department),
+    course_name: courseName,
+    department: null,
     start_date: normalizeDate(body.start_date, 'Start date'),
     start_time: normalizeTime(body.start_time, 'Start time'),
     deadline_date: normalizeDate(body.deadline_date, 'Due date'),
@@ -156,7 +162,13 @@ function parseCreatePayload(body) {
   };
 
   if (!data.course_name) throw badRequest('Course is required.');
+  if (!DEFAULT_COURSES.includes(data.course_name)) {
+    throw badRequest('Course must be MBBS, SHS, or OT.');
+  }
   if (!data.batch) throw badRequest('Batch is required.');
+  if (!isValidCourseBatch(data.course_name, data.batch)) {
+    throw badRequest(`Batch ${data.batch} is not valid for ${data.course_name}.`);
+  }
   if (!data.assignment_name) throw badRequest('Assignment name is required.');
 
   return data;
@@ -253,16 +265,13 @@ async function getStudentProfile(userId) {
 function matchesStudentProfile(assignment, student) {
   if (!student) return false;
   if (student.batch && assignment.batch !== student.batch) return false;
-  if (student.course_name && assignment.course_name !== student.course_name) return false;
-  if (student.department && assignment.department && String(assignment.department).toLowerCase() !== String(student.department).toLowerCase()) {
-    return false;
-  }
+  if (student.course_name && normalizeCourseName(assignment.course_name) !== normalizeCourseName(student.course_name)) return false;
   return true;
 }
 
 export async function listAssignments(req, res) {
   try {
-    const { course_name, batch, department, search } = req.query;
+    const { course_name, batch, search } = req.query;
 
     let sql = `
       SELECT assignment_id, assignment_name, batch, course_name, department,
@@ -274,8 +283,7 @@ export async function listAssignments(req, res) {
     `;
     const params = [];
 
-    if (course_name) { sql += ' AND course_name = ?'; params.push(course_name); }
-    if (department) { sql += ' AND LOWER(department) = LOWER(?)'; params.push(department); }
+    if (course_name) { sql += ' AND UPPER(course_name) = ?'; params.push(normalizeCourseName(course_name)); }
     if (batch) { sql += ' AND batch = ?'; params.push(batch); }
     const searchText = text(search);
     if (searchText) {
@@ -288,11 +296,7 @@ export async function listAssignments(req, res) {
       if (!student) return res.status(404).json({ error: 'Student profile not found' });
 
       if (student.batch) { sql += ' AND batch = ?'; params.push(student.batch); }
-      if (student.course_name) { sql += ' AND course_name = ?'; params.push(student.course_name); }
-      if (student.department) {
-        sql += ' AND (department IS NULL OR LOWER(department) = LOWER(?))';
-        params.push(student.department);
-      }
+      if (student.course_name) { sql += ' AND UPPER(course_name) = ?'; params.push(normalizeCourseName(student.course_name)); }
     }
 
     sql += ' ORDER BY deadline_date DESC, deadline_time DESC, assignment_id DESC';

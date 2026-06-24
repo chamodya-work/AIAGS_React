@@ -7,6 +7,7 @@ import { normalizeRole, roleLabel } from "../middleware/auth.js";
 import { authenticateUniversityUser } from "../services/universityAuth/index.js";
 import { upsertUserFromUniversityProfile } from "../services/universityAuth/userSyncService.js";
 import { envFlag } from "../services/universityAuth/utils.js";
+import { normalizeCourseName } from "../services/courseBatchService.js";
 
 dotenv.config();
 
@@ -219,13 +220,13 @@ export async function createUser(req, res) {
         return res.status(400).json({ error: "student_no is required for students" });
 
       await query(
-        "INSERT INTO students (student_no, user_id, batch, course_name, department) VALUES (?,?,?,?,?)",
+        "INSERT INTO students (student_no, user_id, batch, original_batch, course_name, department) VALUES (?,?,?,?,?,?)",
         [
           data.student_no,
           userId,
-          // data.batch || null,
-          data.student_no.split('/')[1] || null,
-          data.course_name || null,
+          data.batch || null,
+          data.batch || null,
+          data.course_name ? normalizeCourseName(data.course_name) : null,
           data.department || null,
         ]
       );
