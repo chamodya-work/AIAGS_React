@@ -1,5 +1,6 @@
 import { query } from '../db.js';
 import { sendMail } from './emailService.js';
+import { normalizeCourseName } from './courseBatchService.js';
 
 const NOTIFICATION_TYPES = {
   created: 'created',
@@ -64,21 +65,11 @@ async function getRelevantStudents(assignment) {
      LEFT JOIN users u ON u.user_id = s.user_id
      WHERE (u.role IS NULL OR u.role = 'student')
        AND (s.batch IS NULL OR s.batch = '' OR s.batch = ?)
-       AND (s.course_name IS NULL OR s.course_name = '' OR s.course_name = ?)
-       AND (
-         s.department IS NULL
-         OR s.department = ''
-         OR ? IS NULL
-         OR ? = ''
-         OR LOWER(s.department) = LOWER(?)
-       )
+       AND (s.course_name IS NULL OR s.course_name = '' OR UPPER(s.course_name) = ?)
      ORDER BY s.student_no ASC`,
     [
       assignment.batch,
-      assignment.course_name,
-      assignment.department,
-      assignment.department,
-      assignment.department,
+      normalizeCourseName(assignment.course_name),
     ]
   );
 }
@@ -127,7 +118,6 @@ function createdBody(assignment, student) {
     '',
     `Assignment: ${assignment.assignment_name}`,
     `Course: ${assignment.course_name || '-'}`,
-    `Department: ${assignment.department || '-'}`,
     `Batch: ${assignment.batch || '-'}`,
     `Start: ${formatDateTime(assignment.start_date, assignment.start_time)}`,
     `Deadline: ${formatDateTime(assignment.deadline_date, assignment.deadline_time)}`,
