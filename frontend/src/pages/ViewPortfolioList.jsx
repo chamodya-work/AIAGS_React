@@ -168,7 +168,7 @@ export default function ViewPortfolioList() {
                   <th>Submission Status</th>
                   <th>Main Answer</th>
                   <th>AI Status</th>
-                  {/* <th>AI Score</th> */}
+                  <th>AI Score</th>
                   <th>Manual/Teacher Score</th>
                   <th>Lecturer Remark</th>
                   <th>Final Published Score</th>
@@ -203,7 +203,7 @@ export default function ViewPortfolioList() {
                           {p.ai_status || 'pending'}
                         </span>
                       </td>
-                      {/* <td style={{ fontWeight: 700, color: '#2196F3' }}>{p.ai_grade ?? '-'}</td> */}
+                      <td style={{ fontWeight: 700, color: '#2196F3' }}>{p.ai_grade ?? '-'}</td>
                       <td style={{ fontWeight: 700, color: draftHidden ? '#777' : '#27ae60' }}>
                         {draftHidden ? (
                           <span className="manual-not-submitted">{p.manual_remark_display || 'Not submitted by lecturer yet'}</span>
