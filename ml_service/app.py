@@ -4556,7 +4556,9 @@ def feedback(req: GradeRequest):
 # MAX_EXTRACTED_CHARS = _env_int("MAX_EXTRACTED_CHARS", 30000)
 # MAX_INPUT_CHARS_FOR_SMALL_MODEL = _env_int("MAX_INPUT_CHARS_FOR_SMALL_MODEL", 4000)
 # OLLAMA_JSON_MODE = _env_bool("OLLAMA_JSON_MODE", True)
-# OLLAMA_TEMPERATURE = _env_float("OLLAMA_TEMPERATURE", 0.3)
+# # OLLAMA_TEMPERATURE = _env_float("OLLAMA_TEMPERATURE", 0.3)
+# OLLAMA_TEMPERATURE = _env_float("OLLAMA_TEMPERATURE", 0.0)
+
 # OLLAMA_NUM_PREDICT = _env_int("OLLAMA_NUM_PREDICT", 4096)
 # DEBUG_RAW_OUTPUT = _env_bool("DEBUG_RAW_OUTPUT", False)
 
@@ -5146,49 +5148,154 @@ def feedback(req: GradeRequest):
 #         print("=" * 80, file=sys.stderr)
 #     return _extract_first_json(raw_output)
 
-# # ---------- NEW: Google Gemini Vision Caller ----------
+# # # ---------- NEW: Google Gemini Vision Caller ----------
+# # def _call_gemini_vision(prompt: str, file_paths: List[str]) -> Dict[str, Any]:
+# #     """Send prompt + files to Gemini for visual understanding."""
+# #     if not GEMINI_API_KEY:
+# #         raise ValueError("GEMINI_API_KEY is not set")
+# #     try:
+# #         # import google.generativeai as genai
+# #         from google import genai
+# #         from google.genai import types
+# #     except ImportError:
+# #         raise RuntimeError("google-generativeai not installed. Run: pip install google-generativeai")
+    
+# #     genai.configure(api_key=GEMINI_API_KEY)
+# #     model = genai.GenerativeModel(GEMINI_MODEL)
+    
+# #     # Upload files
+# #     uploaded_files = []
+# #     for path in file_paths:
+# #         if os.path.exists(path):
+# #             try:
+# #                 uploaded = genai.upload_file(path, display_name=os.path.basename(path))
+# #                 uploaded_files.append(uploaded)
+# #             except Exception as e:
+# #                 print(f"Warning: Failed to upload {path}: {e}", file=sys.stderr)
+    
+# #     # Build contents: prompt text + uploaded files
+# #     contents = [prompt] + uploaded_files
+    
+# #     generation_config = {
+# #         "response_mime_type": "application/json",
+# #         "temperature": OLLAMA_TEMPERATURE,
+# #         "max_output_tokens": OLLAMA_NUM_PREDICT,
+# #     }
+    
+# #     try:
+# #         response = model.generate_content(contents, generation_config=generation_config)
+# #         raw_output = response.text
+# #         if DEBUG_RAW_OUTPUT:
+# #             print("=" * 80, file=sys.stderr)
+# #             print("RAW GEMINI OUTPUT:", file=sys.stderr)
+# #             print(raw_output, file=sys.stderr)
+# #             print("=" * 80, file=sys.stderr)
+# #         return _extract_first_json(raw_output)
+# #     except Exception as e:
+# #         raise RuntimeError(f"Gemini API error: {e}")
+
+
 # def _call_gemini_vision(prompt: str, file_paths: List[str]) -> Dict[str, Any]:
-#     """Send prompt + files to Gemini for visual understanding."""
+#     """Send prompt + PDF/DOCX files to Gemini using the current Google GenAI SDK."""
+
 #     if not GEMINI_API_KEY:
 #         raise ValueError("GEMINI_API_KEY is not set")
+
 #     try:
-#         import google.generativeai as genai
+#         from google import genai
+#         from google.genai import types
 #     except ImportError:
-#         raise RuntimeError("google-generativeai not installed. Run: pip install google-generativeai")
-    
-#     genai.configure(api_key=GEMINI_API_KEY)
-#     model = genai.GenerativeModel(GEMINI_MODEL)
-    
-#     # Upload files
-#     uploaded_files = []
-#     for path in file_paths:
-#         if os.path.exists(path):
-#             try:
-#                 uploaded = genai.upload_file(path, display_name=os.path.basename(path))
-#                 uploaded_files.append(uploaded)
-#             except Exception as e:
-#                 print(f"Warning: Failed to upload {path}: {e}", file=sys.stderr)
-    
-#     # Build contents: prompt text + uploaded files
-#     contents = [prompt] + uploaded_files
-    
-#     generation_config = {
-#         "response_mime_type": "application/json",
-#         "temperature": OLLAMA_TEMPERATURE,
-#         "max_output_tokens": OLLAMA_NUM_PREDICT,
-#     }
-    
+#         raise RuntimeError(
+#             "google-genai is not installed. Run: pip install -U google-genai"
+#         )
+
 #     try:
-#         response = model.generate_content(contents, generation_config=generation_config)
+#         # Create Gemini client
+#         client = genai.Client(api_key=GEMINI_API_KEY)
+
+#         uploaded_files = []
+
+#         # Upload all files
+#         for path in file_paths:
+
+#             if not path or not os.path.exists(path):
+#                 print(
+#                     f"Warning: File does not exist: {path}",
+#                     file=sys.stderr
+#                 )
+#                 continue
+
+#             try:
+#                 print(
+#                     f"Uploading file to Gemini: {path}",
+#                     file=sys.stderr
+#                 )
+
+#                 uploaded_file = client.files.upload(
+#                     file=path
+#                 )
+
+#                 print(
+#                     f"Gemini upload successful: {uploaded_file.name}",
+#                     file=sys.stderr
+#                 )
+
+#                 uploaded_files.append(uploaded_file)
+
+#             except Exception as e:
+#                 raise RuntimeError(
+#                     f"Failed to upload file to Gemini: {path}\n"
+#                     f"Error: {e}"
+#                 ) from e
+
+#         if not uploaded_files:
+#             raise RuntimeError(
+#                 "No files were successfully uploaded to Gemini."
+#             )
+
+#         # Build Gemini contents
+#         contents = [prompt]
+
+#         for uploaded_file in uploaded_files:
+#             contents.append(uploaded_file)
+
+#         # Gemini generation configuration
+#         generation_config = types.GenerateContentConfig(
+#             response_mime_type="application/json",
+#             temperature=OLLAMA_TEMPERATURE,
+#             max_output_tokens=OLLAMA_NUM_PREDICT,
+#         )
+
+#         print(
+#             f"Sending request to Gemini model: {GEMINI_MODEL}",
+#             file=sys.stderr
+#         )
+
+#         response = client.models.generate_content(
+#             model=GEMINI_MODEL,
+#             contents=contents,
+#             config=generation_config,
+#         )
+
 #         raw_output = response.text
+
+#         if not raw_output:
+#             raise RuntimeError(
+#                 "Gemini returned an empty response."
+#             )
+
 #         if DEBUG_RAW_OUTPUT:
 #             print("=" * 80, file=sys.stderr)
 #             print("RAW GEMINI OUTPUT:", file=sys.stderr)
 #             print(raw_output, file=sys.stderr)
 #             print("=" * 80, file=sys.stderr)
+
 #         return _extract_first_json(raw_output)
+
 #     except Exception as e:
-#         raise RuntimeError(f"Gemini API error: {e}")
+#         raise RuntimeError(
+#             f"Gemini API error: {e}"
+#         ) from e
 
 # # ---------- NEW: Unified AI Caller (with fallback) ----------
 # def _call_ai(prompt: str, file_paths: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -5309,16 +5416,43 @@ def feedback(req: GradeRequest):
 #         rubric_text = rubric_content(req, max_input)
 #         submission_text = submission_content(req, max_input)
 
-#         # NEW: Collect all file paths for vision
+#         # # NEW: Collect all file paths for vision
+#         # file_paths = []
+#         # if req.rubric.file_path and os.path.exists(req.rubric.file_path):
+#         #     file_paths.append(req.rubric.file_path)
+#         # if req.submission.file_path and os.path.exists(req.submission.file_path):
+#         #     file_paths.append(req.submission.file_path)
+#         # if req.submission.files:
+#         #     for f in req.submission.files:
+#         #         if f.file_path and os.path.exists(f.file_path):
+#         #             file_paths.append(f.file_path)
+
+
 #         file_paths = []
+#         seen_file_paths = set()
+
 #         if req.rubric.file_path and os.path.exists(req.rubric.file_path):
 #             file_paths.append(req.rubric.file_path)
+#             seen_file_paths.add(os.path.abspath(req.rubric.file_path))
+
 #         if req.submission.file_path and os.path.exists(req.submission.file_path):
-#             file_paths.append(req.submission.file_path)
+#             path = os.path.abspath(req.submission.file_path)
+
+#             if path not in seen_file_paths:
+#                 file_paths.append(req.submission.file_path)
+#                 seen_file_paths.add(path)
+
 #         if req.submission.files:
 #             for f in req.submission.files:
-#                 if f.file_path and os.path.exists(f.file_path):
+
+#                 if not f.file_path or not os.path.exists(f.file_path):
+#                     continue
+
+#                 path = os.path.abspath(f.file_path)
+
+#                 if path not in seen_file_paths:
 #                     file_paths.append(f.file_path)
+#                     seen_file_paths.add(path)
 
 #         first_error = None
 #         structured = None
@@ -5394,16 +5528,43 @@ def feedback(req: GradeRequest):
 #         rubric_text = rubric_content(req, max_input)
 #         submission_text = submission_content(req, max_input)
 
-#         # NEW: Collect file paths for vision
+#         # # NEW: Collect file paths for vision
+#         # file_paths = []
+#         # if req.rubric.file_path and os.path.exists(req.rubric.file_path):
+#         #     file_paths.append(req.rubric.file_path)
+#         # if req.submission.file_path and os.path.exists(req.submission.file_path):
+#         #     file_paths.append(req.submission.file_path)
+#         # if req.submission.files:
+#         #     for f in req.submission.files:
+#         #         if f.file_path and os.path.exists(f.file_path):
+#         #             file_paths.append(f.file_path)
+
+
 #         file_paths = []
+#         seen_file_paths = set()
+
 #         if req.rubric.file_path and os.path.exists(req.rubric.file_path):
 #             file_paths.append(req.rubric.file_path)
+#             seen_file_paths.add(os.path.abspath(req.rubric.file_path))
+
 #         if req.submission.file_path and os.path.exists(req.submission.file_path):
-#             file_paths.append(req.submission.file_path)
+#             path = os.path.abspath(req.submission.file_path)
+
+#             if path not in seen_file_paths:
+#                 file_paths.append(req.submission.file_path)
+#                 seen_file_paths.add(path)
+
 #         if req.submission.files:
 #             for f in req.submission.files:
-#                 if f.file_path and os.path.exists(f.file_path):
+
+#                 if not f.file_path or not os.path.exists(f.file_path):
+#                     continue
+
+#                 path = os.path.abspath(f.file_path)
+
+#                 if path not in seen_file_paths:
 #                     file_paths.append(f.file_path)
+#                     seen_file_paths.add(path)
 
 #         first_error = None
 #         structured = None
