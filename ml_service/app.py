@@ -5981,54 +5981,276 @@ def rubric_content(req: GradeRequest, max_chars: int = MAX_EXTRACTED_CHARS) -> s
         raise ValueError("Rubric content is missing or unreadable.")
     return _truncate(text, max_chars)
 
-# ---------- Prompt Builders ----------
-def _build_prompt(req: GradeRequest, rubric_text: str, submission_text: str, correction: Optional[str] = None, enforce_no_repeat: bool = False) -> str:
+# # ---------- Prompt Builders ---------- previous working without crisp 
+# def _build_prompt(req: GradeRequest, rubric_text: str, submission_text: str, correction: Optional[str] = None, enforce_no_repeat: bool = False) -> str:
+#     correction_block = ""
+#     if correction:
+#         correction_block = f"""
+# The previous response was invalid for this reason:
+# {correction}
+
+# Return corrected JSON only inside the markers.
+# """
+#     no_repeat = ""
+#     if enforce_no_repeat:
+#         no_repeat = "\nCRITICAL: DO NOT repeat any part of the submission or rubric. Your entire output must be ONLY the grading JSON inside the markers."
+#     return f"""
+# You are a medical education assessor with postgraduate qualifications. Grade the student portfolio using the rubric below.
+# Your entire response must be a single JSON object enclosed by the markers <<<GRADING_JSON_START>>> and <<<GRADING_JSON_END>>>.
+# {no_repeat}
+# RULES:
+# 1. Read all entries in the submission before scoring.
+# 2. Strictly adhere to the rubric criteria and weightage.
+# 3. Score each criterion 1-4 (4=Excellent, 3=Good, 2=Satisfactory, 1=Needs Improvement).
+# 4. Weighted Score = score × weightage. Sum to get total_score out of 100.
+# 5. Score only what is textually present. Do not infer.
+# <<<GRADING_JSON_START>>>
+# {{
+#   "total_score": 0,
+#   "rubric_criteria_feedback": [
+#     {{"criterion": "Depth of reflection", "feedback": "..."}},
+#     {{"criterion": "Critical thinking and evaluative abilities", "feedback": "..."}},
+#     {{"criterion": "Creativity and Innovation", "feedback": "..."}},
+#     {{"criterion": "Content and Comprehensiveness", "feedback": "..."}},
+#     {{"criterion": "Structure, Presentation and Organization", "feedback": "..."}}
+#   ],
+#   "overall_strengths": "string",
+#   "overall_weaknesses": "string",
+# }}
+# <<<GRADING_JSON_END>>>
+
+# Rubric:
+# \"\"\"
+# {rubric_text}
+# \"\"\"
+
+# Student submission:
+# \"\"\"
+# {submission_text}
+# \"\"\"
+# {correction_block}
+# """
+
+
+# # ---------- Prompt Builders ---------- accoding crisp by deep sek
+# def _build_prompt(req: GradeRequest, rubric_text: str, submission_text: str, correction: Optional[str] = None, enforce_no_repeat: bool = False) -> str:
+#     correction_block = ""
+#     if correction:
+#         correction_block = f"""
+# The previous response was invalid for this reason:
+# {correction}
+
+# Return corrected JSON only inside the markers.
+# """
+#     no_repeat = ""
+#     if enforce_no_repeat:
+#         no_repeat = "\nCRITICAL: DO NOT repeat any part of the submission or rubric. Your entire output must be ONLY the grading JSON inside the markers."
+
+#     return f"""
+# [CAPACITY AND ROLE]
+# You are a medical education assessor with postgraduate qualifications.
+
+# [INSIGHT]
+# You are grading a 10-entry student portfolio. The rubric and submission are provided below.
+# RULES:
+# 1. Read all 10 entries before scoring.
+# 2. Refer to entry requirements prior to scoring.
+# 3. Strictly adhere to the rubric given below.
+#    I. Score each criterion 1-4 (4=Excellent, 3=Good, 2=Satisfactory, 1=Needs Improvement).
+#    II. Weighted Score = (score) * (weightage).
+#    III. Total score: out of 100 [_/100].
+# 4. Score only what is textually present. No inference.
+# 5. Do not penalise for formatting errors.
+
+# [STATEMENT]
+# Grade the student portfolio according to the rules and rubric. Your entire response must be a single JSON object enclosed by the markers <<<GRADING_JSON_START>>> and <<<GRADING_JSON_END>>>. The JSON must include:
+# - total_score: integer out of 100.
+# - rubric_criteria_feedback: array of objects, each with "criterion" (string) and "feedback" (string). The criteria are: "Depth of reflection", "Critical thinking and evaluative abilities", "Creativity and Innovation", "Content and Comprehensiveness", "Structure, Presentation and Organization".
+# - overall_strengths: string.
+# - overall_weaknesses: string.
+# - checklist_items: array of objects, each with "item" (string) and "status" (string, either "Present" or "Not Present"). Include all checklist items from the entry requirements.
+# Use the exact JSON format shown below.
+
+# [PERSONALITY]
+# Maintain a formal, objective, and constructive tone. Provide specific feedback citing textual evidence. Avoid vague statements.
+
+# [EXPERIMENT]
+# If any entry is ambiguous, you may provide two possible interpretations (lenient vs. strict) in the feedback for that criterion, but the final score must be a single value.
+
+# [OUTPUT FORMAT]
+# <<<GRADING_JSON_START>>>
+# {{
+#   "total_score": 0,
+#   "rubric_criteria_feedback": [
+#     {{"criterion": "Depth of reflection", "feedback": "..."}},
+#     {{"criterion": "Critical thinking and evaluative abilities", "feedback": "..."}},
+#     {{"criterion": "Creativity and Innovation", "feedback": "..."}},
+#     {{"criterion": "Content and Comprehensiveness", "feedback": "..."}},
+#     {{"criterion": "Structure, Presentation and Organization", "feedback": "..."}}
+#   ],
+#   "overall_strengths": "string",
+#   "overall_weaknesses": "string",
+#   "checklist_items": [
+#     {{"item": "Checklist item 1", "status": "Present"}},
+#     {{"item": "Checklist item 2", "status": "Not Present"}}
+#   ]
+# }}
+# <<<GRADING_JSON_END>>>
+
+# Rubric:
+# \"\"\"
+# {rubric_text}
+# \"\"\"
+
+# Student submission:
+# \"\"\"
+# {submission_text}
+# \"\"\"
+# {correction_block}
+# {no_repeat}
+# """
+
+# ---------- Prompt Builders ----------  by chagpt with crisp
+def _build_prompt(
+    req: GradeRequest,
+    rubric_text: str,
+    submission_text: str,
+    correction: Optional[str] = None,
+    enforce_no_repeat: bool = False
+) -> str:
+
     correction_block = ""
     if correction:
         correction_block = f"""
+[CORRECTION]
 The previous response was invalid for this reason:
 {correction}
 
-Return corrected JSON only inside the markers.
+Return the corrected JSON only inside the required markers.
 """
+
     no_repeat = ""
     if enforce_no_repeat:
-        no_repeat = "\nCRITICAL: DO NOT repeat any part of the submission or rubric. Your entire output must be ONLY the grading JSON inside the markers."
+        no_repeat = """
+[CRITICAL CONSTRAINT]
+Do not repeat any part of the student submission or rubric.
+Your entire response must contain ONLY the required grading JSON
+inside the specified markers.
+"""
+
     return f"""
-You are a medical education assessor with postgraduate qualifications. Grade the student portfolio using the rubric below.
-Your entire response must be a single JSON object enclosed by the markers <<<GRADING_JSON_START>>> and <<<GRADING_JSON_END>>>.
-{no_repeat}
-RULES:
-1. Read all entries in the submission before scoring.
-2. Strictly adhere to the rubric criteria and weightage.
-3. Score each criterion 1-4 (4=Excellent, 3=Good, 2=Satisfactory, 1=Needs Improvement).
-4. Weighted Score = score × weightage. Sum to get total_score out of 100.
-5. Score only what is textually present. Do not infer.
+================ CRISP PROMPT FRAMEWORK ================
+
+[C - CONTEXT]
+You are grading a 10-entry medical education student portfolio.
+
+The portfolio contains student-written entries and an assessment rubric.
+The rubric defines the assessment criteria and weightages used to evaluate
+the complete portfolio.
+
+[R - ROLE]
+Act as a medical education assessor with postgraduate qualifications.
+Assess the portfolio objectively, consistently, and constructively.
+
+[I - INSTRUCTIONS]
+1. Read ALL 10 portfolio entries before scoring.
+2. Refer to the entry requirements before scoring.
+3. Strictly follow the provided rubric and its weightages.
+4. Score each rubric criterion from 1-4:
+   - 4 = Excellent
+   - 3 = Good
+   - 2 = Satisfactory
+   - 1 = Needs Improvement
+5. Weighted Score = score × weightage.
+6. Calculate the total score out of 100.
+7. Provide constructive feedback for each rubric criterion.
+8. Provide overall strengths and overall weaknesses.
+9. Score ONLY what is explicitly and textually present.
+10. Do NOT infer, assume, guess, or invent evidence.
+11. Do NOT penalise formatting errors.
+12. Do not use information outside the supplied rubric and submission.
+13. Ensure the final score is mathematically consistent with the
+    criterion scores and rubric weightages.
+
+[S - SPECIFICS]
+The final response MUST:
+- Be one valid JSON object.
+- Appear only between:
+  <<<GRADING_JSON_START>>>
+  and
+  <<<GRADING_JSON_END>>>
+- Contain no Markdown.
+- Contain no explanation outside the JSON.
+- Use valid JSON syntax.
+- Use double quotes for JSON keys and string values.
+
+Required JSON structure:
+
 <<<GRADING_JSON_START>>>
 {{
   "total_score": 0,
   "rubric_criteria_feedback": [
-    {{"criterion": "Depth of reflection", "feedback": "..."}},
-    {{"criterion": "Critical thinking and evaluative abilities", "feedback": "..."}},
-    {{"criterion": "Creativity and Innovation", "feedback": "..."}},
-    {{"criterion": "Content and Comprehensiveness", "feedback": "..."}},
-    {{"criterion": "Structure, Presentation and Organization", "feedback": "..."}}
+    {{
+      "criterion": "Depth of reflection",
+      "feedback": "..."
+    }},
+    {{
+      "criterion": "Critical thinking and evaluative abilities",
+      "feedback": "..."
+    }},
+    {{
+      "criterion": "Creativity and Innovation",
+      "feedback": "..."
+    }},
+    {{
+      "criterion": "Content and Comprehensiveness",
+      "feedback": "..."
+    }},
+    {{
+      "criterion": "Structure, Presentation and Organization",
+      "feedback": "..."
+    }}
   ],
-  "overall_strengths": "string",
-  "overall_weaknesses": "string",
+  "overall_strengths": "...",
+  "overall_weaknesses": "..."
 }}
 <<<GRADING_JSON_END>>>
 
-Rubric:
+[P - PERSONA]
+Maintain a formal, objective, evidence-based, and constructive academic
+assessment style.
+
+Feedback must be specific to the student's submitted text.
+Explain both strengths and weaknesses clearly.
+Do not use vague statements.
+Do not invent missing evidence.
+Do not reproduce long sections of the student's submission or rubric.
+
+[QUALITY CHECK]
+Before returning the JSON:
+- Confirm all 10 entries were considered.
+- Confirm entry requirements were considered.
+- Confirm the rubric criteria were followed.
+- Confirm every criterion has a score from 1-4 internally.
+- Confirm weighted scoring follows the supplied weightages.
+- Confirm total_score is out of 100.
+- Confirm no unsupported inference was used.
+- Confirm the response contains only the required JSON.
+
+================ END CRISP FRAMEWORK ================
+
+[RUBRIC]
 \"\"\"
 {rubric_text}
 \"\"\"
 
-Student submission:
+[STUDENT SUBMISSION]
 \"\"\"
 {submission_text}
 \"\"\"
+
 {correction_block}
+{no_repeat}
 """
 
 def _build_feedback_prompt(req: GradeRequest, rubric_text: str, submission_text: str, correction: Optional[str] = None, enforce_no_repeat: bool = False) -> str:
